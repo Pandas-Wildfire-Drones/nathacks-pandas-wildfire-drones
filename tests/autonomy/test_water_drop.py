@@ -1,3 +1,4 @@
+"""define unit tests for the water drop evaluation logic."""
 import pytest
 
 from autonomy.water_drop import WaterDropLimits, evaluate_water_drop
@@ -195,3 +196,33 @@ def test_rejects_invalid_agl_altitude():
 def test_rejects_invalid_drop_limits():
     with pytest.raises(ValueError):
         make_limits(min_altitude_agl_m=30, max_altitude_agl_m=10)
+
+def test_rejects_stale_task_epoch():
+    result = evaluate(
+        drone=make_drone(epoch=2),
+        task=make_task(epoch=1),
+    )
+    assert not result.should_drop
+    assert "epoch" in result.reason.lower()
+
+
+def test_allows_matching_task_epoch():
+    result = evaluate(
+        drone=make_drone(epoch=2),
+        task=make_task(epoch=2),
+    )
+    assert result.should_drop
+
+
+def test_rejects_hotspot_assigned_to_another_drone():
+    result = evaluate(
+        hotspot=make_hotspot(assigned_to="drone_99"),
+    )
+    assert not result.should_drop
+
+
+def test_allows_hotspot_assigned_to_this_drone():
+    result = evaluate(
+        hotspot=make_hotspot(assigned_to="drone_02"),
+    )
+    assert result.should_drop
