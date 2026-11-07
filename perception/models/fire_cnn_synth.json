@@ -1,0 +1,77 @@
+{
+  "model_kind": "cnn",
+  "architecture": "TinyFireNet",
+  "width": 16,
+  "patch_spec": {
+    "version": "1",
+    "size_px": 32,
+    "abs_min_c": -20.0,
+    "abs_max_c": 600.0,
+    "contrast_scale_c": 50.0,
+    "border_px": 3,
+    "channels": 2
+  },
+  "input_name": "patches",
+  "output": "logits (apply sigmoid)",
+  "threshold": 0.8403760194778442,
+  "threshold_rule": "recall>=0.95 then max precision (pooled OOF)",
+  "cv_summary": {
+    "precision": {
+      "mean": 0.9983245640962348,
+      "std": 0.001400805189224916,
+      "n": 5
+    },
+    "recall": {
+      "mean": 0.9865922094970474,
+      "std": 0.012048436993300745,
+      "n": 5
+    },
+    "f1": {
+      "mean": 0.9923847058738906,
+      "std": 0.0060481357997410785,
+      "n": 5
+    },
+    "f2": {
+      "mean": 0.9888919397461405,
+      "std": 0.009660908768448863,
+      "n": 5
+    },
+    "accuracy": {
+      "mean": 0.9905112951926055,
+      "std": 0.007359315340029284,
+      "n": 5
+    },
+    "ap": {
+      "mean": 0.9981474635155353,
+      "std": 0.0021977980932202435,
+      "n": 5
+    },
+    "roc_auc": {
+      "mean": 0.995474672247789,
+      "std": 0.005698005844289047,
+      "n": 5
+    }
+  },
+  "patch_stats": {
+    "frames": 480,
+    "frames_skipped_ambiguous": 0,
+    "patches": 2923,
+    "positives": 1857,
+    "negatives": 1066,
+    "groups": 12,
+    "by_origin": {
+      "proposal": 1207,
+      "gt_center": 1236,
+      "random_bg": 480
+    },
+    "proposal_positives": 621,
+    "proposal_negatives_hard": 586
+  },
+  "manifest": "exclude/data/synth/manifest_split.csv",
+  "tag": "synth",
+  "epochs": 15,
+  "seed": 0,
+  "onnx_parity_max_abs": 1.1920928955078125e-05,
+  "created": "2026-11-07T14:55:30",
+  "torch": "2.15.0"
+}

@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.2` · `contract_version: 0.2.0` · last updated 2026-11-07
+`context_version: 0.3` · `contract_version: 0.2.0` · last updated 2026-11-07
 
 ---
 
@@ -41,7 +41,7 @@
 |---|---|---|---|
 | **A** (CS) | Swarm brain | Leader role, election/failover, task allocation (auction/greedy → CBBA stretch), hotspot prioritization, refill assignment, comms protocol, failure handling | messages in `contracts/messages.py` |
 | **B** (CS) | Per-drone autonomy | Coverage search, path planning, obstacle avoidance, deconfliction (`PathClaim`), endurance logic, extinguisher drop logic, refill execution, self-health checks | `Autopilot`, `PayloadSystem`, `Bus` |
-| **C** (CS) | Perception | Detectors (threshold, ONNX, fake), georeferencing, log-odds map, tracking, F1 evaluation, model export; water-body detection (stretch) | `Detector`, `Georeferencer`, `ThermalFrame` |
+| **C** (CS) | Perception | Detectors (threshold, FUSED = threshold + **CNN verifier** in ONNX, fake), georeferencing, log-odds map, tracking, F1 evaluation, model export, synthetic thermal frames (with E); GBM verifier and water-body detection (**stretch**) | `Detector`, `Georeferencer`, `ThermalFrame` |
 | **D** (CS) | Ground base + frontend | FastAPI backend, DB, health monitor, ops console (map, alerts), the "breathing polygons" cinematic sim view | topics `ground/*`, `drone/*/heartbeat`, WebSocket |
 | **E** (Mech E) | Assumptions and physics | Platform/payload math, sensor footprint, fire behaviour, agent and water models, scenario data (FIRMS/CWFIS/Alberta), thermal-frame synthesizer (with C), the "show your math" document | `contracts/config.py` |
 
@@ -69,7 +69,9 @@ Rule of thumb: nobody waits on anybody — `FakeDetector`, `SimAutopilot`, `SimB
 ```
 contracts/    shared Pydantic models, topics, interfaces, config   (this doc §11)
 core/         pure-Python swarm logic: leader, allocation, planning, map   (no ROS/web imports)
-perception/   detectors, georeferencing, mapping/tracking
+perception/   detectors, georeferencing, mapping/tracking, evaluation; models/ (shipped .onnx), RESULTS.md
+training/     offline training (CNN primary, GBM stretch), dataset adapters, DATA_SOURCES.md
+exclude/      GITIGNORED: raw datasets, Colab scratch, training runs
 sim/          world, fire model, sensor/comms models, scenario runner, metrics
 groundbase/   FastAPI, health monitor, DB
 frontend/     React: ops console + cinematic sim view
@@ -133,7 +135,7 @@ tests/  tools/  context.md
 | Contracts | Pydantic v2 models, discriminated-union messages | core | validate at boundaries; arrays (NumPy) inside hot loops |
 | Bus | in-process `SimBus` (with `LossyBus` wrapper: latency/loss by distance) | core | implements `Bus`; use `topic_matches()` |
 | Imaging | NumPy, OpenCV, `scipy.ndimage`, scikit-image | core | keep radiometric °C until after thresholding |
-| ML inference | ONNX Runtime (train in PyTorch, export `.onnx`) | core | `Detector` implementations: THRESHOLD, ML, FUSED, FAKE |
+| ML inference | ONNX Runtime (train in PyTorch, export `.onnx`) | core | `Detector` implementations: THRESHOLD, FUSED (threshold proposals + small CNN patch verifier, the primary ML), FAKE. GBM-on-features verifier (sklearn → skl2onnx) = **stretch**. `DetectorKind.ML` reserved |
 | Planning | A*/potential fields on grid; OR-Tools / `scipy.optimize.linear_sum_assignment` for allocation; Voronoi/boustrophedon for zones | core | CBBA = stretch |
 | Georeferencing | `pyproj` + `rasterio` (DEM) | core (edges only) | lat/lon never inside `core/` |
 | Ground base | FastAPI + WebSockets, SQLite | core | `diagnostics`-style health from heartbeats |
@@ -325,12 +327,17 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
   6. decoy discrimination;
   7. swarm-level behaviour (no dataset exists; use the sim).
 - **Approach for those:** physics/classical methods; **anomaly detection against background** (background-only data is plentiful, positives are not); synthetic data from the sim with domain randomization; ML only where data exists (thermal blob classification/verification).
+- **Perception ML decisions (2026-11-07, workstream C):**
+  - **Verifier = small CNN (PRIMARY)** on 32×32 °C patches (2 channels: absolute temperature, local contrast) centred on `ThresholdDetector` proposals, exported to **ONNX** (not pickle). **GBM on hand-made blob features = STRETCH**, same folds, kept only as a comparison. Preprocessing lives once in `perception/patches.py` (versioned).
+  - **Threshold rule: recall-first**, i.e. recall ≥ 0.95 on cross-validation, then max precision. Missing a spot fire costs more than a seeker INVESTIGATE pass. F1 is still reported against the >90% criterion; accuracy is shown but not trusted (class imbalance). `[ASSUMPTION]` 0.95 target; hot blobs ≥ 300 °C bypass the CNN veto.
+  - **Evaluation:** group-wise train/test split (`training/make_split.py`); 5-fold StratifiedGroupKFold on train; per-fold thresholds chosen on the other folds; test split used once by `perception/evaluate.py`; patch, object and frame levels reported separately; bootstrap CI over groups. Results go to `perception/RESULTS.md` + `perception/results/*.json` (for the demo).
+  - `[VERIFY]` FLAME 3 masks may be **generated by thresholding** the Celsius TIFFs (arXiv 2609.01390), which is circular for a threshold+CNN pipeline: run `python -m training.check_masks` (finds a constant cutoff across frames) and hand-check the test-split masks. The Kaggle subset is **one burn**, so groups = time blocks. Data list: `training/DATA_SOURCES.md`; workflow: `training/README.md`.
 
 ---
 
 ## 11. Contracts
 
-**Install/test:** `pip install -e .[dev]` · `python -m pytest -q` (56 tests) · `python tools/sync_contracts.py` refreshes the code below.
+**Install/test:** `pip install -e .[dev]` (perception: `.[dev,perception]`, training: `.[dev,train]`) · `python -m pytest -q` (56 contract tests + 21 perception tests) · `python tools/sync_contracts.py` refreshes the code below.
 
 **How to use:** build messages with `SwarmMessage.create(sender_id, body, now, seq=…, receiver_id=…)`; publish on `topic_for(msg)`; serialize with `encode()`, parse with `decode()`; match subscriptions with `topic_matches()`; implement `Bus`/`Clock`/`Autopilot`/`PayloadSystem`/`Detector`/`Georeferencer` from `interfaces.py`.
 
@@ -1862,6 +1869,9 @@ def example_scenario() -> ScenarioConfig:
 6. `[OPEN]` **Intake method** for water bodies (bucket vs hose + pump vs onboard tank) and whether foam dosing is realistic with a bucket; engine-life limit on continuous hours.
 7. `[VERIFY]` Alberta/Canadian rules on drawing water from natural sources and on foam/retardant near waterways.
 8. `[VERIFY]` Export/availability limits on thermal cameras (frame rate, licensing) for any real hardware.
+10. `[OPEN]` **Seeker search altitude vs 40 m lidar:** see `docs/decisions/0001-seeker-search-altitude-vs-lidar-range.md` (recommended: keep 80 m, lidar = flight-level obstacle sensor, add a ≥100 m altimeter).
+11. `[VERIFY]` (E) **Thermal saturation:** `ThermalCameraSpec.saturation_temp_c = 550` but Boson+ low gain is listed up to ~350 °C (original Boson ~500 °C; high gain ~140–150 °C) [S23]. Smouldering peaks are 450–700 °C [S24], so fire cores may saturate. Pick the camera and gain mode, then set the value.
+9. `[OPEN]` **Perception targets:** confirm recall ≥ 0.95 as the operating point and the 300 °C hot-bypass (blobs that hot can't be vetoed by the CNN). Who hand-checks FLAME 3 test masks? Has someone emailed the FLAME 3 authors for the full 6-burn set?
 
 ---
 
@@ -1869,6 +1879,8 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-07 | perception chat (C) | added `training/check_masks.py` (mask audit), decision doc 0001 (altitude vs lidar, PROPOSED), §12 items 10–11 (altimeter gap, Boson+ saturation 350 °C vs config 550 °C) | follow-up questions on masks, lidar, hot-bypass |
+| 2026-11-07 | perception chat (C) | v0.3: added `perception/` (threshold, FUSED CNN verifier, fake detector, georef, log-odds map, tracker, metrics, synthetic radiometric frames, pipeline evaluator) and `training/` (group CV, recall-first threshold, ONNX export; GBM = stretch), `exclude/` gitignored; §2/§3/§5/§10/§12 updated; no contract changes (77 tests) | perception workstream kickoff |
 | 2026-11-07 | follow-up chat | v0.2 / contracts 0.2.0: ultra-heavy hybrid extinguisher (800 kg MTOW, 170 L, 210 kg fuel), electric 10 kg seeker, trimmed extinguisher sensors, fuel/generator telemetry, refuel in refill, partial drops, sizing script; basin math redone with fuel (56 tests) | team decision: FireSwarm-style extinguisher, electric seekers |
 | 2026-11-07 | initial chat | Created context v0.1 and contracts 0.1.0 (49 tests passing); sensor baseline reviewed against FireSwarm; added agents, refill/basin, gas-sensing and ML-data sections | project kickoff for parallel work |
 
@@ -1895,3 +1907,8 @@ def example_scenario() -> ScenarioConfig:
 - **S14** PX4 — https://docs.px4.io/main/en/dev_setup/dev_env · https://docs.px4.io/main/en/sim_gazebo_gz/multi_vehicle_simulation
 - **S15** ROS 2 Lyrical Luth — https://discourse.openrobotics.org/t/ros-2-lyrical-luth-released/55021
 - **S16** Water pickup / amphibious drones — https://www.popsci.com/technology/firefighting-drones-help-fight-wildfires/
+- **S20** FLAME 3 masks made by thresholding Celsius TIFFs (segmentation study) — https://arxiv.org/html/2609.01390v1 · FLAME 3 on IEEE DataPort — https://ieee-dataport.org/node/14367
+- **S21** Thermal decoy/negative datasets: HIT-UAV — https://github.com/suojiashun/HIT-UAV-Infrared-Thermal-Dataset · BIRDSAI — https://openaccess.thecvf.com/content_WACV_2020/html/Bondi_BIRDSAI_A_Dataset_for_Detection_and_Tracking_in_Aerial_Thermal_WACV_2020_paper.html · FLAME 2 — https://ieee-dataport.org/open-access/flame-2-fire-detection-and-modeling-aerial-multi-spectral-image-dataset
+- **S23** FLIR Boson / Boson+ scene dynamic range — https://groupgets.com/pages/radiometricboson · https://www.oem.flir.com/support/support-center/knowledge-base/what-is-the-scene-dynamic-range-sdr-of-flirs-oem-modules/
+- **S24** Smouldering 450–700 °C vs flaming 1500–1800 °C peak temperatures (Rein et al. review) — https://www.frontiersin.org/articles/10.3389/fmech.2019.00049/full
+- **S22** Scenario data: Alberta historical wildfire 2006–2024 — https://open.alberta.ca/opendata/a221e7a0-4f46-4be7-9c5a-e29de9a3447e · NASA FIRMS — https://firms.modaps.eosdis.nasa.gov/ · CWFIS — https://cwfis.cfs.nrcan.gc.ca/

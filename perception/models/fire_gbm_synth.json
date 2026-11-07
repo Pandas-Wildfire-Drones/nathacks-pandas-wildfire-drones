@@ -1,0 +1,72 @@
+{
+  "model_kind": "gbm",
+  "stretch_goal": true,
+  "patch_spec": {
+    "version": "1",
+    "size_px": 32,
+    "abs_min_c": -20.0,
+    "abs_max_c": 600.0,
+    "contrast_scale_c": 50.0,
+    "border_px": 3,
+    "channels": 2
+  },
+  "feature_version": "1",
+  "feature_names": [
+    "peak_c",
+    "mean_c",
+    "std_c",
+    "p90_c",
+    "background_c",
+    "peak_minus_bg",
+    "mean_minus_bg",
+    "hot5_frac",
+    "hot10_frac",
+    "hot50_frac",
+    "center_minus_ring",
+    "grad_mean",
+    "grad_max"
+  ],
+  "input_name": "features",
+  "threshold": 0.9849051237106323,
+  "threshold_rule": "recall>=0.95 then max precision (pooled OOF)",
+  "cv_summary": {
+    "precision": {
+      "mean": 0.9937263551721764,
+      "std": 0.004249116331286542,
+      "n": 5
+    },
+    "recall": {
+      "mean": 0.9564047037965542,
+      "std": 0.026299794070277233,
+      "n": 5
+    },
+    "f1": {
+      "mean": 0.9745020756613776,
+      "std": 0.013189564852757444,
+      "n": 5
+    },
+    "f2": {
+      "mean": 0.9635154808954306,
+      "std": 0.021130873857036922,
+      "n": 5
+    },
+    "accuracy": {
+      "mean": 0.9686109486925936,
+      "std": 0.015295062659384094,
+      "n": 5
+    },
+    "ap": {
+      "mean": 0.9975001638341249,
+      "std": 0.002400293601662538,
+      "n": 5
+    },
+    "roc_auc": {
+      "mean": 0.9949111413684462,
+      "std": 0.005016620134894289,
+      "n": 5
+    }
+  },
+  "onnx_parity_max_abs": 8.097164516662758e-08,
+  "tag": "synth",
+  "created": "2026-11-07T14:56:50"
+}

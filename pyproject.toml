@@ -11,9 +11,14 @@ dependencies = ["pydantic>=2.6"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# perception runtime (drone side): numpy/scipy core, onnxruntime for the ML verifier
+perception = ["numpy>=1.26", "scipy>=1.11", "onnxruntime>=1.17"]
+# offline training (Colab / laptop): PyTorch CNN (primary) + sklearn/skl2onnx GBM (stretch)
+train = ["numpy>=1.26", "scipy>=1.11", "onnxruntime>=1.17", "torch>=2.2", "onnx>=1.15", "onnxscript",
+         "scikit-learn>=1.3", "skl2onnx>=1.16", "tifffile", "pillow"]
 
-[tool.setuptools]
-packages = ["contracts"]
+[tool.setuptools.packages.find]
+include = ["contracts*", "perception*", "training*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

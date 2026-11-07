@@ -1,0 +1,10 @@
+# Local-only: datasets, Colab scratch, training runs and checkpoints (never commit data)
+exclude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
