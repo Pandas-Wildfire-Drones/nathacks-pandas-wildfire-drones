@@ -70,7 +70,8 @@ Rule of thumb: nobody waits on anybody — `FakeDetector`, `SimAutopilot`, `SimB
 contracts/    shared Pydantic models, topics, interfaces, config   (this doc §11)
 core/         pure-Python swarm logic: leader, allocation, planning, map   (no ROS/web imports)
 perception/   detectors, georeferencing, mapping/tracking, evaluation; models/ (shipped .onnx), RESULTS.md
-training/     offline training (CNN primary, GBM stretch), dataset adapters, FLAME3.md (citation + how labels are made)
+training/     offline training: train_verifier.ipynb (the whole loop, with plots), CNN primary / GBM stretch, composite.py,
+              label_tool.py, dataset adapters, FLAME3.md (citation, how labels are made, cameras/GSD)
 exclude/      GITIGNORED: raw datasets, Colab scratch, training runs, DATA_SOURCES.md, training_README.md
 sim/          world, fire model, sensor/comms models, scenario runner, metrics
 groundbase/   FastAPI, health monitor, DB
@@ -342,6 +343,9 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
     - *Pixel masks:* the paper describes none. It only says TIFFs *enable* masks via direct, Otsu or hysteresis thresholding; S20 reports thresholded masks. Treat any mask as a threshold unless `python -m training.check_masks` says otherwise (it detects global and per-frame cutoffs).
     - **Consequence:** a threshold + CNN pipeline scores optimistically against these labels. The hard 80–200 °C band (warm decoys, smouldering spots) is under-represented. Report F1 **per max-T band** (< 80 / 80–200 / > 200 °C), and don't cite overall FLAME 3 F1 as evidence for the > 90% criterion. Never copy 80/200 °C into `perception/` as constants.
     - **Training data = synthetic fires on real FLAME 3 No-Fire backgrounds** (`python -m training.composite`): exact masks, radiance mixing, real clutter and noise, groups kept. `objects.csv` gives each fire's observed band for per-band F1. Plain synthetic data (`perception/synth.py`) stays the night test set.
+    - **Workflow:** `training/train_verifier.ipynb` runs the loop (data → composites → group split → patches → CV with plots → ONNX → test once → hand-labelled band), calling the same modules as the CLI. Laptop is enough (tiny CNN); Colab only needs `patches.npz` (tens of MB). Raw data never goes to GitHub or Drive in bulk.
+    - **Hand-labelled hard band (optional test set):** `training/label_tool.py`. A person labels 80–200 °C blobs from the paired RGB photo; Cohen's kappa checks agreement between two labellers.
+    - **FLAME 3 cameras** `[SOURCED S13 Table III]`: Autel 640T (Hanna Hammock, Hundred, Wild Bill), M30T (Sycan), M2EA (Shoetank, Willamette), all 640×512. **High gain clips at 150 °C** (inside the hard band), low gain at 450–550 °C. Thermal GSD ≈ 17.6 cm/px at 122 m nadir (M30T); oblique frames 61–122 m. No-Fire frames are mostly pre-burn oblique imagery.
     - HIT-UAV and BIRDSAI [S21] are **8-bit** (HIT-UAV "bit depth is 8"; BIRDSAI real frames are `.jpg`): no °C, so they can't feed the temperature-channel CNN.
     - The Kaggle subset is **one burn**, so groups = time blocks.
     - Citation (requested by the authors) and full notes: `training/FLAME3.md`. Data list: `exclude/DATA_SOURCES.md`; workflow: `exclude/training_README.md` (local, gitignored).
@@ -1883,7 +1887,7 @@ def example_scenario() -> ScenarioConfig:
 7. `[VERIFY]` Alberta/Canadian rules on drawing water from natural sources and on foam/retardant near waterways.
 8. `[VERIFY]` Export/availability limits on thermal cameras (frame rate, licensing) for any real hardware.
 10. ~~Seeker search altitude vs 40 m lidar~~ **Resolved 2026-11-07: Option A** (keep 80 m; lidar = flight-level obstacle sensor; add a ≥ 100 m altimeter). Alternatives C/D/E on file: `docs/decisions/0001-…`.
-11. `[VERIFY]` (E) **Thermal saturation:** `ThermalCameraSpec.saturation_temp_c = 550` but Boson+ low gain is listed up to ~350 °C (original Boson ~500 °C; high gain ~140–150 °C) [S23]. Smouldering peaks are 450–700 °C [S24], so fire cores may saturate. Pick the camera and gain mode, then set the value.
+11. `[VERIFY]` (E) **Thermal saturation:** `ThermalCameraSpec.saturation_temp_c = 550` but Boson+ low gain is listed up to ~350 °C (original Boson ~500 °C; high gain ~140–150 °C) [S23]. Smouldering peaks are 450–700 °C [S24], so fire cores may saturate. Pick the camera and gain mode, then set the value. For comparison, FLAME 3's 640×512 drone cameras saturate at 450–550 °C in low gain and 150 °C in high gain [S13 Table III].
 9. `[OPEN]` **Perception targets:** confirm recall ≥ 0.95 (search) and precision ≥ 0.98 (confirm) as operating points, and the hot-blob bypass parameters (decision 0003). FLAME 3 labels are threshold-derived (§10). Who hand-labels a small 80–200 °C test set so the hard band has independent labels? Has someone emailed the FLAME 3 authors for the full 6-burn set?
 
 ---
@@ -1892,7 +1896,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
-| 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; `training/composite.py` (synthetic fires on real No-Fire backgrounds, 6 tests); HIT-UAV/BIRDSAI ruled out (8-bit); CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
+| 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; `training/composite.py` (synthetic fires on real No-Fire backgrounds, 6 tests); `training/label_tool.py` (hand-label hard band, 4 tests); `training/train_verifier.ipynb` (whole training loop); FLAME 3 cameras/gain/GSD from Table III; matplotlib + ipykernel in `[train]`; HIT-UAV/BIRDSAI ruled out (8-bit); CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
 | 2026-11-07 | perception chat (C) | decisions 0001 (ACCEPTED A) – 0004 in `docs/decisions/`; PatchSpec v2 scale-normalized patches; confirm/verify stage (`perception/confirm.py`, `evaluate_confirm.py`); precision-first confirm threshold; hot-blob bypass rule replaces 300 °C; sensor wiring (`frame_context.py`, `terrain.py`, `distortion.py`); seeker altimeter in §6.3; no contract changes | user decisions on altitude, bypass, sensors, confirm stage |
 | 2026-11-07 | perception chat (C) | added `training/check_masks.py` (mask audit), decision doc 0001 (altitude vs lidar, PROPOSED), §12 items 10–11 (altimeter gap, Boson+ saturation 350 °C vs config 550 °C) | follow-up questions on masks, lidar, hot-bypass |
 | 2026-11-07 | perception chat (C) | v0.3: added `perception/` (threshold, FUSED CNN verifier, fake detector, georef, log-odds map, tracker, metrics, synthetic radiometric frames, pipeline evaluator) and `training/` (group CV, recall-first threshold, ONNX export; GBM = stretch), `exclude/` gitignored; §2/§3/§5/§10/§12 updated; no contract changes (77 tests) | perception workstream kickoff |
