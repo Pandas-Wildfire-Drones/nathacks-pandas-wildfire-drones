@@ -15,7 +15,7 @@ from pydantic import Field, model_validator
 
 from .base import Contract, FrozenContract
 from .enums import (
-    AlertKind, DroneKind, DroneStatus, ExtinguishingAgent, HotspotStatus, Severity, SwarmRole,
+    AlertKind, DroneKind, DroneStatus, ExtinguishingAgent, HotspotStatus, Powertrain, Severity, SwarmRole,
     TaskStatus, TaskType, WaterSourceKind, WaterSourceOrigin, WaterSourceStatus,
 )
 from .geometry import Position, point_in_polygon
@@ -35,8 +35,13 @@ class DroneState(Contract):
     position: Position
     heading_deg: float = Field(default=0.0, ge=0, lt=360)
     speed_mps: float = Field(default=0.0, ge=0)
-    battery_pct: float = Field(ge=0, le=100)
-    endurance_remaining_s: float | None = Field(default=None, ge=0)  # generator + battery estimate
+    powertrain: Powertrain = Powertrain.ELECTRIC
+    battery_pct: float = Field(ge=0, le=100)  # ELECTRIC: the main pack. HYBRID: the buffer (emergency landing reserve)
+    endurance_remaining_s: float | None = Field(default=None, ge=0)  # drone's own estimate (fuel or battery)
+    # HYBRID only (required for HYBRID, forbidden for ELECTRIC): fuel is what limits an extinguisher sortie.
+    fuel_remaining_kg: float | None = Field(default=None, ge=0)
+    fuel_pct: float | None = Field(default=None, ge=0, le=100)
+    generator_output_kw: float | None = Field(default=None, ge=0)
     water_remaining_l: float | None = Field(default=None, ge=0)      # EXTINGUISHER only
     agent: ExtinguishingAgent | None = None                          # what the tank currently holds
     status: DroneStatus = DroneStatus.IDLE
@@ -48,6 +53,16 @@ class DroneState(Contract):
     sensors_ok: dict[str, bool] = Field(default_factory=dict)
     link_quality: float | None = Field(default=None, ge=0, le=1)
     timestamp: float
+
+    @model_validator(mode="after")
+    def _powertrain_fields(self) -> "DroneState":
+        fuel = (self.fuel_remaining_kg, self.fuel_pct)
+        if self.powertrain is Powertrain.HYBRID and any(f is None for f in fuel):
+            raise ValueError("HYBRID drones must report fuel_remaining_kg and fuel_pct")
+        if self.powertrain is Powertrain.ELECTRIC and (any(f is not None for f in fuel)
+                                                       or self.generator_output_kw is not None):
+            raise ValueError("ELECTRIC drones must not report fuel or generator fields")
+        return self
 
 
 class Hotspot(Contract):
@@ -97,6 +112,9 @@ class Task(Contract):
     created_at: float
     deadline: float | None = None
     epoch: int = Field(default=0, ge=0)  # leader epoch that issued/assigned it
+    # EXTINGUISH only: litres (of the loaded agent) to release on this hotspot. One sortie can serve several
+    # hotspots because the tank is much bigger than a small spot fire needs. None = "all you have".
+    volume_l: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _has_required_target(self) -> "Task":
@@ -142,6 +160,10 @@ class RefillStation(Contract):
         default_factory=lambda: [ExtinguishingAgent.WATER]
     )
     is_mobile: bool = False
+    # HYBRID drones can only refuel at a station (never at a water source). 0 = no fuel service here.
+    fuel_available_kg: float = Field(default=0.0, ge=0)
+    fuel_rate_kg_per_min: float = Field(default=20.0, gt=0)
+    battery_swap_s: float | None = Field(default=None, gt=0)  # None = no swap service (seeker packs)
 
     @model_validator(mode="after")
     def _bays_consistent(self) -> "RefillStation":

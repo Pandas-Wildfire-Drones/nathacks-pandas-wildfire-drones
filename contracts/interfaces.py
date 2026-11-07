@@ -20,7 +20,7 @@ from .sensing import CameraModel, Detection, Obstacle, ThermalFrame
 
 __all__ = [
     "MessageHandler", "Subscription", "Clock", "Bus", "Tickable", "Autopilot", "PayloadSystem",
-    "Detector", "Georeferencer", "ThermalSensor", "ObstacleSensor",
+    "PowerSystem", "Detector", "Georeferencer", "ThermalSensor", "ObstacleSensor",
 ]
 
 MessageHandler = Callable[[SwarmMessage], None]
@@ -69,7 +69,7 @@ class Autopilot(Protocol):
 
 @runtime_checkable
 class PayloadSystem(Protocol):
-    """Water/agent tank on an EXTINGUISHER."""
+    """Water/agent tank on an EXTINGUISHER. `release` supports partial drops (several hotspots per sortie)."""
 
     def water_remaining_l(self) -> float: ...
     def agent(self) -> ExtinguishingAgent: ...
@@ -78,6 +78,18 @@ class PayloadSystem(Protocol):
         ...
     def fill(self, volume_l: float, agent: ExtinguishingAgent = ExtinguishingAgent.WATER) -> float:
         """Add up to volume_l (capped by capacity); returns litres actually added."""
+        ...
+
+
+@runtime_checkable
+class PowerSystem(Protocol):
+    """Energy state. ELECTRIC: pack only. HYBRID: fuel + generator + battery buffer (fuel_* are None when ELECTRIC)."""
+
+    def battery_pct(self) -> float: ...
+    def fuel_remaining_kg(self) -> float | None: ...
+    def generator_output_kw(self) -> float | None: ...
+    def endurance_remaining_s(self) -> float:
+        """Estimate at the CURRENT mass and flight mode; must account for the fuel/battery reserve."""
         ...
 
 

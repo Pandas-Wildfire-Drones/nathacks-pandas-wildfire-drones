@@ -8,14 +8,19 @@ __all__ = [
     "DroneKind", "SwarmRole", "DroneStatus",
     "TaskType", "TaskStatus", "HotspotStatus",
     "WaterSourceKind", "WaterSourceStatus", "WaterSourceOrigin", "RefillTargetKind",
-    "ExtinguishingAgent", "DetectorKind",
+    "ExtinguishingAgent", "DetectorKind", "Powertrain",
     "MessageType", "Severity", "AlertKind", "CommandKind", "SimFaultKind",
 ]
 
 
 class DroneKind(StrEnum):
-    SEEKER = "SEEKER"              # scout: thermal + lidar, finds/confirms hotspots, surveys water
-    EXTINGUISHER = "EXTINGUISHER"  # carries water/agent, drops on confirmed hotspots
+    SEEKER = "SEEKER"              # light electric scout: 640x512 thermal + lidar, searches/confirms, surveys water
+    EXTINGUISHER = "EXTINGUISHER"  # ultra-heavy hybrid water hauler: drops on seeker-confirmed hotspots, does not search
+
+
+class Powertrain(StrEnum):
+    ELECTRIC = "ELECTRIC"  # battery only (seekers): telemetry is battery_pct
+    HYBRID = "HYBRID"      # generator + battery buffer (extinguishers): telemetry adds fuel and generator state
 
 
 class SwarmRole(StrEnum):
@@ -132,6 +137,8 @@ class AlertKind(StrEnum):
     LEADER_LOST = "LEADER_LOST"
     LEADER_ELECTED = "LEADER_ELECTED"
     LOW_BATTERY = "LOW_BATTERY"
+    LOW_FUEL = "LOW_FUEL"                    # hybrid drones: fuel at/below reserve
+    POWERPLANT_FAULT = "POWERPLANT_FAULT"    # generator/engine fault; drone is on battery buffer only
     SENSOR_FAULT = "SENSOR_FAULT"
     COMMS_DEGRADED = "COMMS_DEGRADED"
     HOTSPOT_NEW = "HOTSPOT_NEW"

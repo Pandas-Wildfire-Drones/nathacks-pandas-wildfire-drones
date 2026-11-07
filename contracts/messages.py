@@ -139,6 +139,8 @@ class RefillRequest(_Body):
     position: Position
     water_remaining_l: float = Field(ge=0)
     agent: ExtinguishingAgent = ExtinguishingAgent.WATER
+    fuel_remaining_kg: float | None = Field(default=None, ge=0)  # HYBRID: lets the leader decide station vs basin
+    needs_fuel: bool = False   # True forces a station (basins cannot refuel)
 
 
 class RefillGrant(_Body):

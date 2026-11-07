@@ -15,6 +15,7 @@ from contracts import (
     TaskType, WaterSource, WaterSourceKind, WaterSourceOrigin, WaterSourceReport, Zone,
     decode, default_extinguisher_spec, default_seeker_spec, encode, example_scenario,
     sub_my_commands, topic_for, topic_matches, validate_pattern, CONTRACT_VERSION,
+    PlatformSpec, PowerSystem, Powertrain,
 )
 
 
@@ -273,11 +274,12 @@ def test_example_scenario_is_valid_and_round_trips():
 
 def test_default_platforms_are_physically_consistent():
     ext, seek = default_extinguisher_spec(), default_seeker_spec()
-    assert ext.empty_mass_kg + ext.water_capacity_l <= ext.max_takeoff_kg
+    assert ext.empty_mass_kg + ext.water_capacity_l + ext.fuel_capacity_kg <= ext.max_takeoff_kg
     assert seek.water_capacity_l == 0
     assert 5 * 3600 <= ext.endurance_s <= 8 * 3600     # provider: generator gives 5-8 h
-    assert ext.stopping_distance_m(15.0) == pytest.approx(37.5)
-    assert ext.stopping_distance_m(5.0) == pytest.approx(25 / 6)
+    assert ext.stopping_distance_m(20.0) == pytest.approx(100.0)
+    assert ext.stopping_distance_m(5.0) == pytest.approx(6.25)
+    assert seek.stopping_distance_m(15.0) == pytest.approx(28.125)
     assert ExtinguishingAgent.WATER in DEFAULT_AGENT_SPECS and len(SENSOR_NAMES) == len(set(SENSOR_NAMES))
 
 
@@ -304,3 +306,84 @@ def test_protocols_are_runtime_checkable():
 
     assert isinstance(C(), Clock) and isinstance(B(), Bus)
     assert not isinstance(object(), Autopilot)
+
+
+# ---------- powertrains, fuel telemetry, refuel ----------
+def test_platform_roles_and_powertrains():
+    ext, seek = default_extinguisher_spec(), default_seeker_spec()
+    assert ext.powertrain is Powertrain.HYBRID and seek.powertrain is Powertrain.ELECTRIC
+    assert seek.search_capable and not ext.search_capable
+    assert ext.thermal.camera.width_px < seek.thermal.camera.width_px      # confirm, not detect
+    assert set(ext.sensor_names) <= set(SENSOR_NAMES) and "power" in ext.sensor_names
+    assert ext.max_takeoff_kg > 50 * seek.max_takeoff_kg / 10               # ultra-heavy vs light
+
+
+def test_hybrid_endurance_math_matches_rating():
+    ext = default_extinguisher_spec()
+    full = ext.hybrid_endurance_s()
+    assert full == pytest.approx(ext.endurance_s, rel=0.03)                 # rated 5 h
+    assert ext.hybrid_endurance_s(reserve=True) == pytest.approx(0.82 * full, rel=0.03)
+    assert ext.hybrid_endurance_s(water_l=0.0) > full                       # lighter -> longer
+    assert ext.fuel_burn_kg_h(ext.max_takeoff_kg) == pytest.approx(52.0)
+    assert ext.fuel_burn_kg_h(400.0) == pytest.approx(52.0 * 0.5 ** 1.5)
+
+
+def test_electric_endurance_math_matches_rating():
+    seek = default_seeker_spec()
+    assert seek.electric_endurance_s() == pytest.approx(seek.endurance_s, rel=0.02)
+    assert seek.electric_endurance_s(hover=True) < seek.electric_endurance_s()
+    with pytest.raises(ValueError):
+        seek.fuel_burn_kg_h(10.0)
+
+
+def test_platform_validation_for_powertrains():
+    base = default_extinguisher_spec().model_dump()
+    bad = dict(base, fuel_capacity_kg=300.0)                                 # 420 + 170 + 300 > 800
+    with pytest.raises(ValidationError):
+        PlatformSpec.model_validate(bad)
+    with pytest.raises(ValidationError):
+        PlatformSpec.model_validate(dict(base, fuel_burn_kg_h_at_mtow=None))  # HYBRID needs a burn model
+    with pytest.raises(ValidationError):
+        PlatformSpec.model_validate(dict(base, sensor_names=["thermal", "sonar"]))
+    seeker = default_seeker_spec().model_dump()
+    with pytest.raises(ValidationError):
+        PlatformSpec.model_validate(dict(seeker, battery_wh=None))
+    with pytest.raises(ValidationError):
+        PlatformSpec.model_validate(dict(seeker, fuel_capacity_kg=1.0))
+
+
+def test_drone_state_fuel_rules():
+    hybrid = DroneState(drone_id="x01", kind=DroneKind.EXTINGUISHER, position=pos(), battery_pct=95.0,
+                        powertrain=Powertrain.HYBRID, fuel_remaining_kg=180.0, fuel_pct=85.7,
+                        generator_output_kw=96.0, water_remaining_l=170.0,
+                        sensors_ok={"power": True, "payload": True}, timestamp=1.0)
+    assert DroneState.model_validate_json(hybrid.model_dump_json()) == hybrid
+    with pytest.raises(ValidationError):   # HYBRID must report fuel
+        DroneState(drone_id="x01", kind=DroneKind.EXTINGUISHER, position=pos(), battery_pct=90.0,
+                   powertrain=Powertrain.HYBRID, timestamp=1.0)
+    with pytest.raises(ValidationError):   # ELECTRIC must not
+        DroneState(drone_id="d01", kind=DroneKind.SEEKER, position=pos(), battery_pct=90.0,
+                   fuel_remaining_kg=1.0, fuel_pct=1.0, timestamp=1.0)
+
+
+def test_refuel_and_partial_drop_fields_roundtrip():
+    req = RefillRequest(drone_id="x01", position=pos(), water_remaining_l=0.0,
+                        fuel_remaining_kg=40.0, needs_fuel=True)
+    msg = SwarmMessage.create(sender_id="x01", body=req, now=5.0, seq=1)
+    assert decode(encode(msg)).body == req
+    task = Task(task_id="t1", type=TaskType.EXTINGUISH, target_hotspot_id="h1", created_at=0.0, volume_l=30.0)
+    assert Task.model_validate_json(task.model_dump_json()).volume_l == 30.0
+    with pytest.raises(ValidationError):
+        Task(task_id="t2", type=TaskType.EXTINGUISH, target_hotspot_id="h1", created_at=0.0, volume_l=0.0)
+    st = example_scenario().stations[0]
+    assert st.fuel_available_kg > 0 and st.battery_swap_s is not None
+    assert AlertKind.LOW_FUEL in AlertKind and AlertKind.POWERPLANT_FAULT in AlertKind
+
+
+def test_power_system_protocol():
+    class P:
+        def battery_pct(self): return 90.0
+        def fuel_remaining_kg(self): return None
+        def generator_output_kw(self): return None
+        def endurance_remaining_s(self): return 100.0
+    assert isinstance(P(), PowerSystem) and not isinstance(object(), PowerSystem)

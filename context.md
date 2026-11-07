@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.1` · `contract_version: 0.1.0` · last updated 2026-11-07
+`context_version: 0.2` · `contract_version: 0.2.0` · last updated 2026-11-07
 
 ---
 
@@ -29,7 +29,7 @@
 **Our decisions so far (Dev Reports #1–#2):**
 - Criteria and weights: detection of wildfires at night (>90% F1) = 3; navigation at night (obstacle avoidance) = 3; efficient extinguishing = 3; swarm coordination = 2; economical/effective drone design = 1.
 - Scored 9 approaches; the **mixed algorithmic + ML** approach won (85/85 for "LWIR + lidar" and "LWIR + NIR/SWIR, DEM, RTK-GNSS"). Radar was dropped for now (see §6.4 for a correction: radar is not limited by darkness; its weakness is coarse resolution).
-- Multiple drone types: **Seekers** (find/confirm) and **Extinguishers** (carry water).
+- Multiple drone types: **Seekers** (light, electric; search + confirm + survey water) and **Extinguishers** (ultra-heavy, **hybrid** generator + battery; carry water, drop on seeker-confirmed hotspots, do not search). Chosen 2026-11-07, FireSwarm/Thunder-Wasp class.
 
 **Demo reality:** the final demo is **purely software**, shown in a room — no drones, no real fires. Sensor data is synthetic or comes from static datasets. The **stretch goal** is code that runs on real drones (ROS 2 / PX4 / Jetson) without rewriting the logic.
 
@@ -95,7 +95,8 @@ tests/  tools/  context.md
         hotspots, bids  │                            │ TASK_ASSIGN / REFILL_GRANT
         ┌───────────────┴──────┐          ┌──────────▼───────────────┐
         │ SEEKERS              │          │ EXTINGUISHERS            │
-        │ thermal + lidar      │          │ tank + agent + thermal   │
+        │ electric, ~52 min    │          │ hybrid, 170 L, fuel-ltd  │
+        │ 640x512 thermal+lidar│          │ 320x256 thermal + lidar  │
         └──────────────────────┘          └──────────────────────────┘
 ```
 
@@ -107,14 +108,18 @@ tests/  tools/  context.md
 5. **Time comes from `Clock`** (float seconds). No `time.time()` / `datetime.now()` in core logic. Sim must be deterministic given `ScenarioConfig.seed`.
 6. **Conventions** (see `contracts/geometry.py`): ENU meters, local origin; `z` = height above scenario datum (not AGL); compass headings; grids `[row, col]` with row 0 = south; PX4 NED/FRD conversion only inside the PX4 adapter.
 7. **Commands carry a leader `epoch`.** Ignore commands whose epoch is lower than the highest you've seen (stops a stale leader after failover).
-8. **Humans declare fires out.** Drones can mark a hotspot `SUPPRESSED`; only `GroundCommand(CONFIRM_OUT)` produces `VERIFIED_OUT` `[SOURCED S2]` (FireSwarm: fires are suppressed by air assets, extinguished by humans).
+8. **Fuel is a hard constraint for extinguishers.** A hybrid drone returns to a *station* (water sources can't refuel it) when `fuel_remaining_kg` ≤ reserve + fuel to get home. Fuel and battery-buffer state ride in every heartbeat (`DroneState.fuel_*`).
+9. **Extinguishers don't scout.** They fly corridors already cleared by Seekers/DEM and approach hotspots a Seeker has confirmed (stopping distance at 20 m/s is 100 m, far beyond the 40 m lidar). Humans stay in the loop, see rule 10.
+10. **Humans declare fires out.** Drones can mark a hotspot `SUPPRESSED`; only `GroundCommand(CONFIRM_OUT)` produces `VERIFIED_OUT` `[SOURCED S2]` (FireSwarm: fires are suppressed by air assets, extinguished by humans).
 
 **Failure behaviour:**
 - *Leader lost* (missed heartbeats / `LeaderClaim` silence) → followers finish the current task, then hold; election: highest `(epoch, score, candidate_id)` wins; new leader increments epoch and re-announces.
 - *Follower lost* → leader marks it `LOST`, re-queues its task, emits an `ALERT`.
 - *Ground link lost* → swarm continues; ground shows drones as `LOST` until heartbeats resume.
 - *RTK corrections lost* → `sensors_ok["gnss_rtk"]=False`; drop accuracy degrades (model it in sim).
-- *Low endurance / water* → return/refill, never "push on".
+- *Low fuel / battery / water* → return/refill, never "push on". `AlertKind.LOW_FUEL` / `LOW_BATTERY`.
+- *Powerplant fault* (generator or engine, `sensors_ok["power"]=False`) → the 5 kWh buffer gives about 2 min of hover-equivalent power: land immediately at the nearest cleared spot; emit `AlertKind.POWERPLANT_FAULT`; leader re-queues the task.
+- *Seeker battery low* → return for a swap (~52 min sorties); the leader must rotate seekers so coverage doesn't gap.
 
 **Messaging (QoS):** heartbeats/telemetry and map deltas are best-effort (stale is worthless); hotspot reports, task assignment/ack/complete, refill, commands and alerts are reliable. Defaults are in `DEFAULT_QOS`. Topics: `drone/{id}/…`, `swarm/…`, `ground/…`, `sim/…` (see `ROUTES`).
 
@@ -141,51 +146,78 @@ tests/  tools/  context.md
 
 ## 6. Drone platform and sensor baseline
 
-### 6.1 Reference platforms (real hardware to anchor our numbers)
+### 6.1 Reference platforms (real hardware that anchors our numbers)
 
 | Class | Example | Figures | Source |
 |---|---|---|---|
-| Ag spray, heavy-lift multirotor | DJI Agras T50 | 39.9 kg w/o battery, 52 kg with; max takeoff (spraying) 92 kg; 40 L tank; battery 30,000 mAh at ~51.8 V; a reseller listing quotes ~7 min hover at full spray load | S5 |
-| US initial-attack drone fleets | FireSparrow-class (San Bernardino County) | ~80 lb (~10 gal) payload per one report, ~100 lb per another; round trip up to ~10 mi; one technician refills and swaps the battery "within minutes" | S6 |
-| Ultra-heavy | ACC ThunderWasp (FireSwarm) | up to 400 kg or 100 gal (~379 L); turbine-powered quadcopter; cruise up to 48 kt (~24.7 m/s); endurance 60–90 min (ASCE) vs up to 2 h (CTIF) — treat as a range | S1, S2, S3 |
+| **Ultra-heavy hybrid (our extinguisher anchor)** | ACC Thunder Wasp GT, FireSwarm's platform | quadrotor, gas turbine on Jet A-1; MTOW 800 kg, empty 375 kg; up to 248 kg fuel → just under 4 h with 177 kg payload; with 400 kg payload ~20 min; cruise 70–90 km/h, max 110 km/h; PBS TS100 turbine 61.2 kg with a 1 kW generator; 378.5 L (100 gal) max water; carries a Bambi bucket and lowers *itself* (no winch) | S17, S18 |
+| Light electric (seeker anchor) | commodity thermal/lidar quadcopters | ~10 kg class, ~45–55 min; we derive it in §6.3 | derived |
+| Electric heavy ag drone (reference only) | DJI Agras T50 | 52 kg w/ battery, 92 kg MTOW, 40 L; ~7 min hover at full load per a reseller | S5 |
+| US initial-attack fleets | FireSparrow-class | ~10 gal payload, ~10 mi round trip, technician refills and swaps battery "within minutes" | S6 |
 
-**Our default (`[ASSUMPTION]`, mech E to confirm):** both roles use a **T50-class airframe** — Extinguisher: 40 L water (40 kg), Seeker: same airframe, no water. Cruise 15 m/s, max 22 m/s, braking 3 m/s², **endurance 6 h** (middle of the provider's 5–8 h generator range). Generator mass/fuel is *not* modelled yet `[OPEN]`. `[OPEN]` whether to move to an ultra-heavy class (fewer, bigger drones) — it changes swarm size, drops per hotspot and refill logistics.
+FireSwarm's published endurance is all over the place: 30–40 min (evtol.news, GT hybrid-electric prototype), 60–90 min (ASCE), up to 2 h (CTIF), vs ACC's own **~4 h at 177 kg payload / ~20 min at 400 kg**. Payload and fuel trade 1:1 inside the same 800 kg MTOW, which explains it `[S1,S2,S3,S17,S18]`. The provider's "generator gives 5–8 h" is therefore *our assumption to defend*, so §6.2 shows what it costs.
 
-### 6.2 FireSwarm (Canadian, Squamish BC) — what we learned
+### 6.2 Extinguisher sizing (hybrid, ultra-heavy) — the math
 
-FireSwarm does not publish its onboard sensor spec (ASCE and CTIF both omit it) `[SOURCED S2,S3]`, so the baseline below is built from component data plus analogy. What *is* public and useful:
+Script: `python tools/sizing.py` (all numbers below come from it).
 
-1. **Layered detection, then suppression.** Their platform combines infrared sensing, swarm intelligence and ultra-heavy-lift drones, and is *drone-agnostic*. Detection comes from layers: an under-wing IR pod that detects and geolocates early fires **without gimbaled cameras**, AI optical/thermal imaging with ground climate-sensor mesh, a high-altitude platform, and **low-altitude VTOL overwatch that confirms early readings** `[S1]`. → Our pipeline is *cue → Seeker confirm → Extinguisher suppress → human verify*; FIRMS/ground sensors are the cue; Seekers are the close-range confirm layer. → **Use a fixed nadir camera + pose-based georeferencing; no gimbal.**
-2. **Suppression drones are water haulers with light sensing**; the detection layer is separate. Supports the Seeker/Extinguisher split and a lighter Extinguisher sensor load.
-3. **Water pickup is part of autonomy.** FireSwarm drones use Bambi buckets, plan their own water pickups and drops, and fly at night `[S2]`; ThunderWasp carries water from natural and human-made sources `[S1]`. → Validates the refill-basin idea (§8).
-4. **Humans stay in the loop.** Air assets suppress, humans extinguish and declare fires out `[S2]`.
-5. **Decoys.** The XPRIZE autonomous final gives teams 10 minutes to detect and suppress a high-risk fire in a 1,000 km² area **while leaving decoy fires untouched** `[S1]`. → `ScenarioConfig.decoys` exists; measure *water wasted on non-fires*.
+**Step 1 — calibrate fuel burn to ACC.** Burn scales with hover power, `burn(m) = b₀·(m/M)^1.5` (same disk loading). Fitting b₀ = **80 kg/h at 800 kg** reproduces both sourced points: 248 kg fuel + 177 kg payload → **4.08 h** (source: just under 4 h); 25 kg fuel + 400 kg payload → **19 min** (source: ~20 min). Cross-check: momentum theory for 4 × 2.6 m rotors, FM 0.7 gives ≈ 138 kW hover shaft power at 800 kg, which implies a small-turbine SFC of ~0.6 kg/kWh, plausible `[ASSUMPTION]`.
 
-### 6.3 Baseline loadout (per drone)
+**Step 2 — hybrid factor.** A heavy-fuel piston/rotary genset with electric drive burns less fuel per kWh than a small turbine. We take **×0.65 → b₀ = 52 kg/h at MTOW** `[ASSUMPTION/VERIFY]` — *this is the number that makes the provider's 5 h possible*; with the turbine's 80 kg/h the same airframe gets ~3.3 h.
 
-| Item | Seeker | Extinguisher | Mass | Power | Basis |
-|---|---|---|---|---|---|
-| Radiometric LWIR thermal | 640×512, ~32° HFOV (dual thermal+visible module optional) | 320×256 nadir, ~50° HFOV: aim + verify | ~25 g | ~1–1.8 W | S7: module 7.5 g bare, ~21–23 g with lens, from 0.5 W; 56 g / 1.8 W dual module; OEM modules ≈ $4.2k–$6.4k |
-| 3D lidar (Livox Mid-360 class) | ✔ | ✔ | 265 g | 6.5 W | S8: typical range 40 m on a 10% reflectivity target |
-| Companion computer (Jetson Orin NX 16 GB class) | ✔ detector + map | ✔ (could be lighter) | module 26 g; ~200 g with carrier + cooling `[ASSUMPTION]` | 10–25 W | S9 |
-| Flight controller (Pixhawk class) | ✔ | ✔ | ~75 g `[ASSUMPTION]` | ~3 W `[ASSUMPTION]` | |
-| RTK-GNSS receiver + antenna | ✔ | ✔ | ~75 g `[ASSUMPTION]` | ~1.5 W `[ASSUMPTION]` | needs corrections from the ground base |
-| Downward rangefinder / radar altimeter | ✔ | ✔ | ~50 g `[ASSUMPTION]` | ~2 W `[ASSUMPTION]` | terrain following, drop height |
-| Mesh radio | ✔ | ✔ | ~300 g `[ASSUMPTION]` | ~8 W `[ASSUMPTION]` | |
-| Water system: tank, valve/pump, flow or level sensor, optional foam dosing | — | ✔ | payload | small | `[OPEN]` mech E (§7, §8) |
-| ADS-B in (manned-aircraft awareness) | recommended | recommended | small | small | `[ASSUMPTION]` |
+**Step 3 — choose tank vs fuel inside 800 kg MTOW** (empty 420 kg = ACC's 375 + 20 genset + 25 for a 5 kWh battery buffer, `[ASSUMPTION]`):
 
-**Seeker avionics ≈ 1.0 kg, ≈ 48 W.** For scale: 1 kg ≈ 2.5% of a 40 kg water load; implied hover power for a ~90 kg T50-class aircraft ≈ 13 kW (1.55 kWh ÷ 7 min, a derived order-of-magnitude figure from a reseller listing, `[ASSUMPTION]`), so avionics ≈ 0.4%. **Weight is not the sensor constraint; integration complexity and justification are.** Sensors map to `SENSOR_NAMES` in `contracts/config.py`.
+| Water | Fuel | Endurance, loaded the whole flight (to dry) | With 15% fuel reserve |
+|---|---|---|---|
+| 120 L | 260 kg | 6.7 h | 5.4 h |
+| 150 L | 230 kg | 5.7 h | 4.6 h |
+| **170 L (chosen)** | **210 kg** | **5.06 h** | **4.14 h** |
+| 200 L | 180 kg | 4.2 h | 3.5 h |
+| 250 L | 130 kg | 2.9 h | 2.4 h |
+| 300 L | 80 kg | 1.7 h | 1.4 h |
+
+170 L ≈ ACC's 177 kg payload point. It is a **conservative rating** (water aboard the whole flight); real cycling drops water and burns less (see §8 for what one fuel load actually lasts). Planned usable flight ≈ 4.1 h `[ASSUMPTION]`; `endurance_s` in the spec is the 5 h rating.
+
+**Step 4 — speeds and stopping.** Cruise **20 m/s** (inside ACC's 70–90 km/h = 19–25 m/s), max 25 m/s, braking 2 m/s² (heavy). Stopping distance: 6 m at 5 m/s, 25 m at 10, **100 m at 20, 156 m at 25.** The 40 m lidar cannot protect cruise → corridors cleared by seekers/DEM, ≥120 m AGL transit, ≤5 m/s below 30 m AGL.
+
+**Step 5 — emergency buffer.** 5 kWh at 138 kW ≈ **2.2 min** of hover power: enough to land, not to continue. `[ASSUMPTION]`
+
+**Step 6 — drops.** 170 L at 10 L/m² (placeholder) = **17 m²** of hotspot per sortie with water, ~51 m² with 3× foam. A 2–4 m² spot fire needs 20–40 L, so **one sortie serves ~4 hotspots** → `Task.volume_l` allows partial drops; `PayloadSystem.release()` returns litres actually released. Drop height 15 m AGL (rotor wash on a 800 kg machine, `[ASSUMPTION]`), release 8 s.
+
+`[OPEN]` Ultra-heavy drones are few: default **2 extinguishers**, 6 seekers.
+
+### 6.3 Seeker sizing (light, electric) and sensor loadouts
+
+**Seeker, electric multirotor `[ASSUMPTION]`:** MTOW 10 kg = 4.0 kg battery (1000 Wh at 250 Wh/kg, 80% usable → 800 Wh) + 1.0 kg avionics + 3.2 kg frame/motors/props + 1.8 kg margin. 4 × 26" props (A = 1.37 m²): hover ≈ **1.02 kW** (momentum theory, FM 0.65, η 0.8) + 48 W avionics; cruise at 15 m/s ≈ 0.85 × hover + 48 W = **0.92 kW** → **~52 min cruise, ~45 min hover.** Ideal coverage 2.5 km²/h → **~2 km² per sortie** (4 × 4 km default grid = 16 km² = 8 sortie-equivalents; 6 seekers cover it in a couple of rotations). Speed 15 m/s (max 20), braking 4 m/s² → stops in 28 m from 15 m/s, 50 m from 20.
+`[OPEN]` Option: electric **VTOL fixed-wing** seeker (12 kg, L/D ~10 → ~0.38 kW at 20 m/s → ~2.6 h on 1 kWh) like FireSwarm's VTOL overwatch layer; costs hover-to-confirm ability.
+
+| Item | Seeker (electric, searches) | Extinguisher (hybrid, confirms) | Why / basis |
+|---|---|---|---|
+| Radiometric LWIR thermal | **640×512**, 32° HFOV (dual thermal+visible optional) | **320×256**, 50° HFOV, nadir | seeker detects; extinguisher only aims/verifies a known hotspot. Boson-class: ~25 g, 1–1.8 W `[S7]` |
+| 3D lidar (Livox Mid-360 class) | ✔ obstacle map + water surveys | ✔ **last-mile only** (descent, drop, intake) | 40 m range `[S8]` |
+| Flight controller | ✔ | ✔ | Pixhawk class |
+| RTK-GNSS | ✔ | ✔ | needs ground-base corrections |
+| Range/altitude sensor | laser rangefinder | **radar altimeter** (calm water returns weakly to lasers `[VERIFY]`) | terrain following, drop height |
+| Companion computer | Jetson Orin NX class: detector + map `[S9]` | **smaller** (Orin Nano class): verify, navigation, bus | extinguisher doesn't run search |
+| Mesh radio | ✔ | ✔ | |
+| ADS-B in | recommended | **✔ required** (big and in the same airspace as manned water bombers) | `[ASSUMPTION]` |
+| Power telemetry | battery pack voltage/current/temp | **fuel level/flow, generator output, engine temp, battery buffer** | new in contracts 0.2.0 |
+| Tank, valve/dosing, flow/level sensing | — | ✔ | `[OPEN]` mech E |
+
+**What the extinguisher drops vs the seeker:** the 640×512 thermal, the heavy compute, the search detector/mapping role and the dual visible camera. What it keeps: everything it needs to *not die* and to hit a confirmed spot. Avionics: seeker ≈ 1.0 kg / 48 W; extinguisher ≈ 1.2 kg / 35 W (0.15% of MTOW). **Weight is not why we trim the extinguisher's sensors; integration effort, power-fault surface area and "who owns the perception" are.** Sensors map to `SENSOR_NAMES` in `contracts/config.py` (`power` added in 0.2.0).
+
+**About "gas levels":** I read this as **fuel level** (hybrid telemetry, now in `DroneState.fuel_remaining_kg` / `fuel_pct`, plus `generator_output_kw`, `AlertKind.LOW_FUEL`). If you also meant combustion gases (CO etc.), that's the deferred byproduct-sensing idea in §9.
 
 ### 6.4 Review notes (what changed after the final review)
 
-- **Stopping distance vs lidar range.** At 15 m/s with 3 m/s² braking, stopping distance is 37.5 m — about the full 40 m lidar range on a dark (10% reflectivity) target. At 10 m/s it is 16.7 m; at 5 m/s, 4.2 m. **Rule:** cruise *above* the tallest obstacle (DEM + canopy margin); descend only for drops/intake and slow to ≤5 m/s there. `PlatformSpec.stopping_distance_m()` encodes the math.
+- **Stopping distance vs lidar range.** Seeker at 15 m/s, 4 m/s²: 28 m (the 40 m lidar barely covers it on a dark 10% reflectivity target). Extinguisher at 20 m/s, 2 m/s²: **100 m**, lidar can't help. **Rule:** cruise *above* the tallest obstacle (DEM + canopy margin); extinguishers follow seeker-cleared corridors; descend only for drops/intake and slow to ≤5 m/s. `PlatformSpec.stopping_distance_m()` encodes the math.
 - **Thin obstacles (wires)** are often missed by lidar `[VERIFY]` → use mapped power lines + altitude margin.
 - **Radar correction:** radar is unaffected by darkness; its limit is coarse angular resolution. Real heavy-lift ag drones pair active phased-array radar with binocular vision for obstacle avoidance `[S5]`. Dropping radar for the demo is defensible; consider a **radar altimeter** for hover over water (laser returns from calm water are weak `[VERIFY]`).
 - **NIR/SWIR is optional, not baseline.** LWIR already covers night detection of smouldering hotspots; SWIR sees hot flames/embers but is costly and misses cooler hotspots `[VERIFY]`.
 - **Dual thermal+visible** is a nice-to-have for the ops view and dusk/daytime pre-survey of water sources.
 - **RTK dependency:** corrections come from the ground base; model `gnss_rtk` degradation.
 - **Added:** water level/flow sensing (otherwise estimate from valve time × flow rate), wind estimate from the flight controller (needed for drop drift), ADS-B in, health telemetry for the ground base.
+- **Hot/ash environment:** hovering a turbine or engine in smoke, ash and updrafts is unproven even for FireSwarm `[S19]`; approach from upwind, keep a standoff `[ASSUMPTION]`, model derating and `POWERPLANT_FAULT` as sim faults.
 - **Gas sensors:** deferred, see §9.
 
 ### 6.5 Detection physics the sim must reproduce
@@ -210,7 +242,7 @@ FireSwarm does not publish its onboard sensor spec (ASCE and CTIF both omit it) 
 | Agent | Mix / facts | Claimed benefit | Fit: night spot-fire knockdown | Basin refill | Constraints |
 |---|---|---|---|---|---|
 | **Plain water** | — | baseline | ✔ default | ✔ no dosing needed | none |
-| **Class A foam** | 0.1–1% concentrate `[S10]`; most products work best near 0.3–0.5% `[S10]` | Manufacturer: often 3–5× more effective than water `[S10]`; independent test authors call that claim controversial with limited comparative testing `[S10]` | ✔ strong: USFS says foams rely on their water and are best for direct attack and mop-up `[S10]` | ✔ **only if dosing happens after intake** (onboard proportioner). 40 L × 0.3% = 120 mL concentrate per fill; a 2 L reservoir ≈ 16 fills | US guideline: no aerial foam/retardant within 300 ft (91.44 m) of waterways `[S11]`; Canadian/Alberta rule `[VERIFY]` |
+| **Class A foam** | 0.1–1% concentrate `[S10]`; most products work best near 0.3–0.5% `[S10]` | Manufacturer: often 3–5× more effective than water `[S10]`; independent test authors call that claim controversial with limited comparative testing `[S10]` | ✔ strong: USFS says foams rely on their water and are best for direct attack and mop-up `[S10]` | ✔ **only if dosing happens after intake** (onboard proportioner). 170 L × 0.3% = 0.51 L concentrate per fill; a 10 L reservoir ≈ 19 fills. **Caveat:** ACC/FireSwarm use a dip *bucket*, where dosing after intake is hard; we assume an onboard tank `[OPEN]` | US guideline: no aerial foam/retardant within 300 ft (91.44 m) of waterways `[S11]`; Canadian/Alberta rule `[VERIFY]` |
 | **Gel / water enhancer** | mix varies; sensitive to water hardness `[S10]` | adhesion, drop accuracy | weak (structure protection more than hotspot knockdown) | ⚠ basin water quality changes consistency | same waterway buffers |
 | **Long-term retardant** (ammonium phosphate) | — | stays effective after water evaporates | ✘ fireline building, not spot knockdown | ✘ | toxic to aquatic life `[S11]`; waterway buffers |
 
@@ -218,7 +250,7 @@ FireSwarm does not publish its onboard sensor spec (ASCE and CTIF both omit it) 
 - Baseline `ExtinguishingAgent.WATER`; optional `CLASS_A_FOAM` module (needs dosing, sim multiplier 3× as an *assumption*, not a promise); gel and retardant are out of scope (retardant enum deliberately omitted).
 - **Basin refilling stays enabled for foam** via onboard dosing: the tank holds plain water until dosing after intake, so foam never contaminates a basin and gel/foam quality isn't hostage to basin water.
 - **Waterway rule as an algorithm:** if a hotspot is within `AgentSpec.aquatic_buffer_m` of a water source, fall back to plain water. (Sim hook: `agent_allowed(hotspot, water_sources)`.)
-- Sim settings: `ScenarioConfig.agent`, `agent_specs`, `use_water_sources`. `suppression_l_per_m2` is a **PLACEHOLDER (10 L/m²)**: E must derive it (fuel type, burn depth). With a 3× agent, a 3 m² hotspot at 10 L/m² needs 30 L of water or ~10 L of foam solution.
+- Sim settings: `ScenarioConfig.agent`, `agent_specs`, `use_water_sources`. `suppression_l_per_m2` is a **PLACEHOLDER (10 L/m²)**: E must derive it (fuel type, burn depth). With a 3× agent, a 3 m² hotspot at 10 L/m² needs 30 L of water or ~10 L of foam solution; one 170 L sortie = 17 m² of hotspot with water, ~51 m² with foam.
 
 ---
 
@@ -228,17 +260,28 @@ FireSwarm does not publish its onboard sensor spec (ASCE and CTIF both omit it) 
 
 **Reality check.** FireSwarm drones plan their own water pickups with buckets and carry water from natural and human-made sources `[S1,S2]`; US initial-attack drone fleets refill at a base station by a technician "within minutes" `[S6]`; amphibious drones are pitched for night firefighting precisely because they can refill from lakes `[S16]`.
 
-**Throughput model** (one extinguisher; cruise 15 m/s, 40 L tank, fill 120 s, drop 8 s; `d` = refill-point-to-fire distance):
-`cycle = 2d/v + t_fill + t_drop` · `throughput = W / cycle`
+**Throughput model** (one extinguisher; 170 L tank, cruise 20 m/s, fill 120 s, drop 8 s; `d` = refill-point-to-fire distance; engine idles 8 kg/h on the pad `[ASSUMPTION]`): `cycle = 2d/v + t_fill + t_drop`, `throughput = W / cycle`.
 
-| Refill point | Cycle | Throughput |
-|---|---|---|
-| Station 15 km away | 35.5 min | 1.13 L/min (68 L/h) |
-| Station 5 km away | 13.2 min | 3.02 L/min (181 L/h) |
-| Basin 1 km away | 4.4 min | 9.18 L/min (551 L/h) |
-| Basin 0.5 km away | 3.2 min | 12.33 L/min (740 L/h) |
+| Refill point | Cycle | Throughput | Fuel per cycle | Litres per kg fuel |
+|---|---|---|---|---|
+| Station 15 km | 27.1 min | 6.3 L/min (376 L/h) | 14.9 kg | 11 |
+| Station 5 km | 10.5 min | 16.2 L/min (975 L/h) | 5.3 kg | 32 |
+| Station 5 km + 3 min queue | 13.5 min | 12.6 L/min | 5.3 kg | 32 |
+| Basin 1 km | 3.8 min | 44.7 L/min (2,684 L/h) | 1.5 kg | 116 |
+| Basin 0.5 km | 3.0 min | 57.3 L/min | 1.0 kg | 172 |
 
-A basin 1 km from the fire beats a station 15 km away by **~8×**. A 3 min queue at a 5 km station drops it to ~2.5 L/min. **Depletion is negligible:** 100 sorties × 40 L = 4 m³ ≈ 1% of a 20 m × 20 m × 1 m pond; still track `est_volume_l` for tiny sources.
+A basin 1 km from the fire beats a station 15 km away by **~7×** in delivery rate.
+
+**Fuel is now the binding constraint, and basins help it too.** Simulating one full fuel load (210 kg, 15% reserve, mass falling as fuel burns, `tools/sizing.py`):
+
+| Refill point | Cycles | Flight hours | Water delivered | L per kg usable fuel |
+|---|---|---|---|---|
+| Station 15 km | 11 | 5.0 h | 1.9 m³ | 10.5 |
+| Station 5 km | 33 | 5.8 h | 5.6 m³ | 31 |
+| Basin 1 km | 131 | 8.3 h | 22.3 m³ | 125 |
+| Basin 0.5 km | 206 | 10.2 h | 35.0 m³ | 196 |
+
+So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km station. **But basins can't refuel the drone**, so the leader must still schedule station visits for fuel (`RefillRequest.needs_fuel=True` forces a station), and the sim should cap continuous hours with an engine-life/maintenance limit rather than treat 8–10 h as free `[OPEN]`. **Water depletion is negligible:** 100 sorties × 170 L = 17 m³ ≈ 4% of a 20 × 20 × 1 m pond (400 m³); still track `est_volume_l` for tiny sources.
 
 **Discovery pipeline.** Prior hydrography → candidate `WaterSource(origin=PRIOR_MAP, status=CANDIDATE)` → a Seeker flies `SURVEY_WATER` → `VALIDATED` (or `REJECTED`) → leader includes it in refill options → `RefillRequest`/`RefillGrant`. Prior water maps (provincial/national hydrography, OpenStreetMap) mean seekers mostly *validate*, not discover `[VERIFY availability/licence]`. Candidate night cues, all `[VERIFY]` with real data: **LWIR:** water often looks warmer than surrounding land at night; **lidar:** calm water returns weakly (holes in the cloud); **DEM:** flat depressions. Also check **approach clearance** (trees around the shore, corridor aligned with wind) → `approach_clearance_m`.
 
@@ -249,11 +292,11 @@ A basin 1 km from the fire beats a station 15 km away by **~8×**. A 3 min queue
 4. Water-survey scheduling: survey candidates near predicted fire zones first (value of information).
 5. Station queue/bay management.
 
-**Risks / constraints:** foam contamination (see §7); gel quality vs water hardness; rotor wash on shallow ponds; frozen/dry/seasonal sources; legality of withdrawing water and ecology `[VERIFY Alberta]`; false "water" (wet fields); night hover over water (lidar altitude unreliable → RTK/baro + radar altimeter); **intake method is `[OPEN]` for E**: dip bucket (Bambi-style, as FireSwarm) vs hover with hose + pump vs other. Humans may need to approve new sources → `GroundCommand(ENABLE_WATER_SOURCE/DISABLE_WATER_SOURCE)`.
+**Risks / constraints:** foam contamination (see §7); gel quality vs water hardness; rotor wash on shallow ponds; frozen/dry/seasonal sources; legality of withdrawing water and ecology `[VERIFY Alberta]`; false "water" (wet fields); night hover over water (lidar altitude unreliable → RTK/baro + radar altimeter); **intake method is `[OPEN]` for E**: dip bucket (what Thunder Wasp actually carries: it lowers itself, no winch `[S17]`) vs hover with hose + pump vs other. A bucket changes fill time and makes onboard foam dosing hard. Humans may need to approve new sources → `GroundCommand(ENABLE_WATER_SOURCE/DISABLE_WATER_SOURCE)`.
 
-**Contract hooks:** `WaterSource`, `RefillStation`, `TaskType.SURVEY_WATER` / `REFILL`, `WaterSourceReport`, `RefillRequest`, `RefillGrant`, `MapSync.water_sources`, `ScenarioConfig.use_water_sources` (feature flag), `AlertKind.WATER_SOURCE_NEW`.
+**Contract hooks:** `WaterSource`, `RefillStation` (now with `fuel_available_kg`, `fuel_rate_kg_per_min`, `battery_swap_s`), `TaskType.SURVEY_WATER` / `REFILL`, `WaterSourceReport`, `RefillRequest` (`fuel_remaining_kg`, `needs_fuel`), `RefillGrant`, `MapSync.water_sources`, `ScenarioConfig.use_water_sources` (feature flag), `AlertKind.WATER_SOURCE_NEW`.
 
-**Metrics:** litres delivered per drone-hour, time to first drop per hotspot, fraction of time in transit vs on target, refill queue wait, water wasted on decoys.
+**Metrics:** litres delivered per drone-hour **and per kg fuel**, time to first drop per hotspot, fraction of time in transit vs on target, refill queue wait, water wasted on decoys.
 
 **Build plan:** MVP = station + prior-map sources (flag on/off for the A/B comparison) · Stretch 1 = `SURVEY_WATER` validation with synthetic thermal water blobs · Stretch 2 = joint optimizer.
 
@@ -287,7 +330,7 @@ A basin 1 km from the fire beats a station 15 km away by **~8×**. A 3 min queue
 
 ## 11. Contracts
 
-**Install/test:** `pip install -e .[dev]` · `python -m pytest -q` (49 tests) · `python tools/sync_contracts.py` refreshes the code below.
+**Install/test:** `pip install -e .[dev]` · `python -m pytest -q` (56 tests) · `python tools/sync_contracts.py` refreshes the code below.
 
 **How to use:** build messages with `SwarmMessage.create(sender_id, body, now, seq=…, receiver_id=…)`; publish on `topic_for(msg)`; serialize with `encode()`, parse with `decode()`; match subscriptions with `topic_matches()`; implement `Bus`/`Clock`/`Autopilot`/`PayloadSystem`/`Detector`/`Georeferencer` from `interfaces.py`.
 
@@ -299,6 +342,7 @@ A basin 1 km from the fire beats a station 15 km away by **~8×**. A 3 min queue
 - `ImagingMap` is **not** a Pydantic model: it is NumPy layers (log-odds, last-seen). Its wire format is sparse `GridCellUpdate` inside `MapSync`.
 - `Sensor.read()` is replaced by `ThermalSensor` / `ObstacleSensor` protocols; frames stay on the drone.
 - `HotspotStatus.VERIFIED_OUT` is ground-confirmed only.
+- **0.2.0:** `Powertrain` (ELECTRIC/HYBRID); `DroneState` gains `powertrain`, `fuel_remaining_kg`, `fuel_pct`, `generator_output_kw` (HYBRID must report fuel, ELECTRIC must not); `PlatformSpec` gains `search_capable`, electric (`battery_wh`, powers) and hybrid (`fuel_*`, `battery_buffer_wh`) models with `fuel_burn_kg_h()`, `hybrid_endurance_s()`, `electric_endurance_s()`; `PowerSystem` protocol; `Task.volume_l` for partial drops; `RefillStation` fuel/battery-swap services; `RefillRequest.needs_fuel`; `AlertKind.LOW_FUEL`, `POWERPLANT_FAULT`; sensor name `power`; defaults changed to seeker = electric 10 kg, extinguisher = hybrid 800 kg / 170 L; scenario default 6 seekers, 2 extinguishers.
 
 <!-- CONTRACTS:BEGIN -->
 
@@ -343,7 +387,7 @@ __all__ = ["CONTRACT_VERSION", "Contract", "FrozenContract", "Seconds"]
 
 # Bump when a field is renamed/removed or semantics change. Add a line to the
 # changelog in context.md. Messages carry this in `SwarmMessage.v`.
-CONTRACT_VERSION = "0.1.0"
+CONTRACT_VERSION = "0.2.0"
 
 # All timestamps/durations are float SECONDS in the Clock's timebase
 # (sim time in the simulator, wall-clock epoch seconds on real hardware).
@@ -362,7 +406,7 @@ class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 ```
 
-#### `contracts/enums.py` (162 lines)
+#### `contracts/enums.py` (169 lines)
 
 ```python
 """Enumerations shared by every workstream.
@@ -375,14 +419,19 @@ __all__ = [
     "DroneKind", "SwarmRole", "DroneStatus",
     "TaskType", "TaskStatus", "HotspotStatus",
     "WaterSourceKind", "WaterSourceStatus", "WaterSourceOrigin", "RefillTargetKind",
-    "ExtinguishingAgent", "DetectorKind",
+    "ExtinguishingAgent", "DetectorKind", "Powertrain",
     "MessageType", "Severity", "AlertKind", "CommandKind", "SimFaultKind",
 ]
 
 
 class DroneKind(StrEnum):
-    SEEKER = "SEEKER"              # scout: thermal + lidar, finds/confirms hotspots, surveys water
-    EXTINGUISHER = "EXTINGUISHER"  # carries water/agent, drops on confirmed hotspots
+    SEEKER = "SEEKER"              # light electric scout: 640x512 thermal + lidar, searches/confirms, surveys water
+    EXTINGUISHER = "EXTINGUISHER"  # ultra-heavy hybrid water hauler: drops on seeker-confirmed hotspots, does not search
+
+
+class Powertrain(StrEnum):
+    ELECTRIC = "ELECTRIC"  # battery only (seekers): telemetry is battery_pct
+    HYBRID = "HYBRID"      # generator + battery buffer (extinguishers): telemetry adds fuel and generator state
 
 
 class SwarmRole(StrEnum):
@@ -499,6 +548,8 @@ class AlertKind(StrEnum):
     LEADER_LOST = "LEADER_LOST"
     LEADER_ELECTED = "LEADER_ELECTED"
     LOW_BATTERY = "LOW_BATTERY"
+    LOW_FUEL = "LOW_FUEL"                    # hybrid drones: fuel at/below reserve
+    POWERPLANT_FAULT = "POWERPLANT_FAULT"    # generator/engine fault; drone is on battery buffer only
     SENSOR_FAULT = "SENSOR_FAULT"
     COMMS_DEGRADED = "COMMS_DEGRADED"
     HOTSPOT_NEW = "HOTSPOT_NEW"
@@ -730,7 +781,7 @@ class Obstacle(FrozenContract):
     kind: str = "unknown"  # e.g. "tree", "pole", "terrain"
 ```
 
-#### `contracts/entities.py` (171 lines)
+#### `contracts/entities.py` (193 lines)
 
 ```python
 """Domain entities: the nouns of the system.
@@ -750,7 +801,7 @@ from pydantic import Field, model_validator
 
 from .base import Contract, FrozenContract
 from .enums import (
-    AlertKind, DroneKind, DroneStatus, ExtinguishingAgent, HotspotStatus, Severity, SwarmRole,
+    AlertKind, DroneKind, DroneStatus, ExtinguishingAgent, HotspotStatus, Powertrain, Severity, SwarmRole,
     TaskStatus, TaskType, WaterSourceKind, WaterSourceOrigin, WaterSourceStatus,
 )
 from .geometry import Position, point_in_polygon
@@ -770,8 +821,13 @@ class DroneState(Contract):
     position: Position
     heading_deg: float = Field(default=0.0, ge=0, lt=360)
     speed_mps: float = Field(default=0.0, ge=0)
-    battery_pct: float = Field(ge=0, le=100)
-    endurance_remaining_s: float | None = Field(default=None, ge=0)  # generator + battery estimate
+    powertrain: Powertrain = Powertrain.ELECTRIC
+    battery_pct: float = Field(ge=0, le=100)  # ELECTRIC: the main pack. HYBRID: the buffer (emergency landing reserve)
+    endurance_remaining_s: float | None = Field(default=None, ge=0)  # drone's own estimate (fuel or battery)
+    # HYBRID only (required for HYBRID, forbidden for ELECTRIC): fuel is what limits an extinguisher sortie.
+    fuel_remaining_kg: float | None = Field(default=None, ge=0)
+    fuel_pct: float | None = Field(default=None, ge=0, le=100)
+    generator_output_kw: float | None = Field(default=None, ge=0)
     water_remaining_l: float | None = Field(default=None, ge=0)      # EXTINGUISHER only
     agent: ExtinguishingAgent | None = None                          # what the tank currently holds
     status: DroneStatus = DroneStatus.IDLE
@@ -783,6 +839,16 @@ class DroneState(Contract):
     sensors_ok: dict[str, bool] = Field(default_factory=dict)
     link_quality: float | None = Field(default=None, ge=0, le=1)
     timestamp: float
+
+    @model_validator(mode="after")
+    def _powertrain_fields(self) -> "DroneState":
+        fuel = (self.fuel_remaining_kg, self.fuel_pct)
+        if self.powertrain is Powertrain.HYBRID and any(f is None for f in fuel):
+            raise ValueError("HYBRID drones must report fuel_remaining_kg and fuel_pct")
+        if self.powertrain is Powertrain.ELECTRIC and (any(f is not None for f in fuel)
+                                                       or self.generator_output_kw is not None):
+            raise ValueError("ELECTRIC drones must not report fuel or generator fields")
+        return self
 
 
 class Hotspot(Contract):
@@ -832,6 +898,9 @@ class Task(Contract):
     created_at: float
     deadline: float | None = None
     epoch: int = Field(default=0, ge=0)  # leader epoch that issued/assigned it
+    # EXTINGUISH only: litres (of the loaded agent) to release on this hotspot. One sortie can serve several
+    # hotspots because the tank is much bigger than a small spot fire needs. None = "all you have".
+    volume_l: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _has_required_target(self) -> "Task":
@@ -877,6 +946,10 @@ class RefillStation(Contract):
         default_factory=lambda: [ExtinguishingAgent.WATER]
     )
     is_mobile: bool = False
+    # HYBRID drones can only refuel at a station (never at a water source). 0 = no fuel service here.
+    fuel_available_kg: float = Field(default=0.0, ge=0)
+    fuel_rate_kg_per_min: float = Field(default=20.0, gt=0)
+    battery_swap_s: float | None = Field(default=None, gt=0)  # None = no swap service (seeker packs)
 
     @model_validator(mode="after")
     def _bays_consistent(self) -> "RefillStation":
@@ -906,7 +979,7 @@ class Alert(Contract):
     timestamp: float
 ```
 
-#### `contracts/messages.py` (297 lines)
+#### `contracts/messages.py` (299 lines)
 
 ```python
 """Bus messages: one frozen body model per MessageType, joined by a discriminated union.
@@ -1050,6 +1123,8 @@ class RefillRequest(_Body):
     position: Position
     water_remaining_l: float = Field(ge=0)
     agent: ExtinguishingAgent = ExtinguishingAgent.WATER
+    fuel_remaining_kg: float | None = Field(default=None, ge=0)  # HYBRID: lets the leader decide station vs basin
+    needs_fuel: bool = False   # True forces a station (basins cannot refuel)
 
 
 class RefillGrant(_Body):
@@ -1300,7 +1375,7 @@ def topic_matches(pattern: str, topic: str) -> bool:
     return len(p) == len(t)
 ```
 
-#### `contracts/interfaces.py` (107 lines)
+#### `contracts/interfaces.py` (119 lines)
 
 ```python
 """Interfaces (Protocols) between layers. Drone logic depends ONLY on these, never on ROS/PX4/FastAPI.
@@ -1325,7 +1400,7 @@ from .sensing import CameraModel, Detection, Obstacle, ThermalFrame
 
 __all__ = [
     "MessageHandler", "Subscription", "Clock", "Bus", "Tickable", "Autopilot", "PayloadSystem",
-    "Detector", "Georeferencer", "ThermalSensor", "ObstacleSensor",
+    "PowerSystem", "Detector", "Georeferencer", "ThermalSensor", "ObstacleSensor",
 ]
 
 MessageHandler = Callable[[SwarmMessage], None]
@@ -1374,7 +1449,7 @@ class Autopilot(Protocol):
 
 @runtime_checkable
 class PayloadSystem(Protocol):
-    """Water/agent tank on an EXTINGUISHER."""
+    """Water/agent tank on an EXTINGUISHER. `release` supports partial drops (several hotspots per sortie)."""
 
     def water_remaining_l(self) -> float: ...
     def agent(self) -> ExtinguishingAgent: ...
@@ -1383,6 +1458,18 @@ class PayloadSystem(Protocol):
         ...
     def fill(self, volume_l: float, agent: ExtinguishingAgent = ExtinguishingAgent.WATER) -> float:
         """Add up to volume_l (capped by capacity); returns litres actually added."""
+        ...
+
+
+@runtime_checkable
+class PowerSystem(Protocol):
+    """Energy state. ELECTRIC: pack only. HYBRID: fuel + generator + battery buffer (fuel_* are None when ELECTRIC)."""
+
+    def battery_pct(self) -> float: ...
+    def fuel_remaining_kg(self) -> float | None: ...
+    def generator_output_kw(self) -> float | None: ...
+    def endurance_remaining_s(self) -> float:
+        """Estimate at the CURRENT mass and flight mode; must account for the fuel/battery reserve."""
         ...
 
 
@@ -1412,7 +1499,7 @@ class ObstacleSensor(Protocol):
     def obstacles(self) -> list[Obstacle]: ...
 ```
 
-#### `contracts/config.py` (254 lines)
+#### `contracts/config.py` (342 lines)
 
 ```python
 """Platform, sensor, agent and scenario configuration.
@@ -1428,7 +1515,7 @@ from pydantic import Field, model_validator
 from .base import Contract
 from .entities import RefillStation, WaterSource
 from .enums import (
-    DroneKind, ExtinguishingAgent, WaterSourceKind, WaterSourceOrigin, WaterSourceStatus,
+    DroneKind, ExtinguishingAgent, Powertrain, WaterSourceKind, WaterSourceOrigin, WaterSourceStatus,
 )
 from .geometry import GeoOrigin, GridSpec, Position
 from .sensing import CameraModel
@@ -1440,7 +1527,8 @@ __all__ = [
 ]
 
 # Keys used in DroneState.sensors_ok and SimFault(DEGRADE_SENSOR).
-SENSOR_NAMES = ("thermal", "lidar", "gnss_rtk", "rangefinder", "comms", "compute", "payload")
+# "power" = battery pack / fuel system / generator health (both powertrains). "payload" = tank/valve (extinguisher).
+SENSOR_NAMES = ("thermal", "lidar", "gnss_rtk", "rangefinder", "comms", "compute", "payload", "power")
 
 
 class ThermalCameraSpec(Contract):
@@ -1474,16 +1562,26 @@ class CommsSpec(Contract):
 
 
 class PlatformSpec(Contract):
+    """One airframe + powertrain + sensor set. See context.md section 6 for the math behind the defaults.
+
+    ELECTRIC (seekers): energy = battery_wh * battery_usable_frac; power from hover_power_w / cruise_power_w.
+    HYBRID (extinguishers): fuel + generator, with a small battery BUFFER for peaks and emergency landing.
+        Fuel burn follows burn(m) = fuel_burn_kg_h_at_mtow * (m / max_takeoff_kg)^1.5 (hover-power scaling at
+        constant disk loading), calibrated to ACC Thunder Wasp GT figures (context.md section 6.2).
+    """
+
     kind: DroneKind
     name: str
-    empty_mass_kg: float = Field(gt=0)
+    powertrain: Powertrain = Powertrain.ELECTRIC
+    search_capable: bool = True          # False = does not run area search; thermal is for aim/verify only
+    empty_mass_kg: float = Field(gt=0)   # includes battery (ELECTRIC) or engine + generator + buffer battery (HYBRID); EXCLUDES fuel
     max_takeoff_kg: float = Field(gt=0)
     water_capacity_l: float = Field(default=0.0, ge=0)  # 1 L of water ~ 1 kg
     cruise_speed_mps: float = Field(gt=0)
     max_speed_mps: float = Field(gt=0)
     max_accel_mps2: float = Field(default=3.0, gt=0)    # also used as braking decel for stopping distance
-    endurance_s: float = Field(gt=0)                    # with generator; provider range is 5-8 h (18000-28800 s)
-    search_altitude_agl_m: float = Field(gt=0)
+    endurance_s: float = Field(gt=0)                    # RATED, at full mass, to empty (no reserve); see methods below
+    search_altitude_agl_m: float = Field(gt=0)          # extinguishers: transit altitude (they do not search)
     drop_height_agl_m: float = Field(default=10.0, gt=0)
     drop_release_s: float = Field(default=8.0, gt=0)    # time to empty the tank
     refill_time_s: float = Field(default=120.0, gt=0)   # hook-up + fill (+ dosing)
@@ -1494,17 +1592,75 @@ class PlatformSpec(Contract):
     has_rtk_gnss: bool = True
     sensor_names: list[str] = Field(default_factory=lambda: list(SENSOR_NAMES))
 
+    # --- ELECTRIC energy model ---
+    battery_wh: float | None = Field(default=None, gt=0)
+    battery_usable_frac: float = Field(default=0.8, gt=0, le=1)
+    hover_power_w: float | None = Field(default=None, gt=0)   # total electric incl. avionics
+    cruise_power_w: float | None = Field(default=None, gt=0)  # total electric incl. avionics
+
+    # --- HYBRID energy model ---
+    fuel_capacity_kg: float | None = Field(default=None, gt=0)
+    fuel_density_kg_per_l: float = Field(default=0.8, gt=0)   # Jet A-1 / diesel class
+    fuel_reserve_frac: float = Field(default=0.15, ge=0, lt=1)  # never plan below this fraction of capacity
+    fuel_burn_kg_h_at_mtow: float | None = Field(default=None, gt=0)
+    battery_buffer_wh: float | None = Field(default=None, gt=0)  # emergency-landing / peak buffer
+
     @model_validator(mode="after")
     def _physics_sane(self) -> "PlatformSpec":
-        if self.empty_mass_kg + self.water_capacity_l > self.max_takeoff_kg + 1e-9:
-            raise ValueError("empty_mass_kg + water_capacity_l exceeds max_takeoff_kg")
+        fuel = self.fuel_capacity_kg or 0.0
+        if self.empty_mass_kg + self.water_capacity_l + fuel > self.max_takeoff_kg + 1e-9:
+            raise ValueError("empty_mass_kg + water_capacity_l + fuel_capacity_kg exceeds max_takeoff_kg")
         if self.cruise_speed_mps > self.max_speed_mps:
             raise ValueError("cruise_speed_mps exceeds max_speed_mps")
+        unknown = set(self.sensor_names) - set(SENSOR_NAMES)
+        if unknown:
+            raise ValueError(f"unknown sensor names: {sorted(unknown)}")
+        if self.powertrain is Powertrain.ELECTRIC:
+            if None in (self.battery_wh, self.hover_power_w, self.cruise_power_w):
+                raise ValueError("ELECTRIC needs battery_wh, hover_power_w, cruise_power_w")
+            if self.fuel_capacity_kg is not None or self.fuel_burn_kg_h_at_mtow is not None:
+                raise ValueError("ELECTRIC must not define fuel fields")
+        else:
+            if None in (self.fuel_capacity_kg, self.fuel_burn_kg_h_at_mtow, self.battery_buffer_wh):
+                raise ValueError("HYBRID needs fuel_capacity_kg, fuel_burn_kg_h_at_mtow, battery_buffer_wh")
         return self
 
     def stopping_distance_m(self, speed_mps: float) -> float:
         """v^2 / (2a): distance needed to stop from `speed_mps` at max_accel_mps2."""
         return speed_mps ** 2 / (2 * self.max_accel_mps2)
+
+    # ---- ELECTRIC helpers ----
+    def electric_endurance_s(self, hover: bool = False) -> float:
+        if self.powertrain is not Powertrain.ELECTRIC:
+            raise ValueError("electric_endurance_s is for ELECTRIC platforms")
+        power = self.hover_power_w if hover else self.cruise_power_w
+        return self.battery_wh * self.battery_usable_frac / power * 3600.0
+
+    # ---- HYBRID helpers ----
+    def fuel_burn_kg_h(self, mass_kg: float) -> float:
+        """Burn rate at total mass `mass_kg` (hover-power scaling, exponent 1.5)."""
+        if self.powertrain is not Powertrain.HYBRID:
+            raise ValueError("fuel_burn_kg_h is for HYBRID platforms")
+        return self.fuel_burn_kg_h_at_mtow * (mass_kg / self.max_takeoff_kg) ** 1.5
+
+    def hybrid_endurance_s(self, water_l: float | None = None, fuel_kg: float | None = None,
+                           reserve: bool = False) -> float:
+        """Closed-form flight time while carrying `water_l` the whole time, burning `fuel_kg` (default: full tank).
+
+        With dm/dt = -b0 (m/M)^1.5 the substitution u = m^-0.5 gives u(t) = u0 + 0.5 b0 M^-1.5 t, hence
+        t = 2 M^1.5 (m1^-0.5 - m0^-0.5) / b0. `reserve=True` stops at fuel_reserve_frac of capacity.
+        Conservative: real sorties drop water, so mass (and burn) falls.
+        """
+        if self.powertrain is not Powertrain.HYBRID:
+            raise ValueError("hybrid_endurance_s is for HYBRID platforms")
+        w = self.water_capacity_l if water_l is None else water_l
+        f0 = self.fuel_capacity_kg if fuel_kg is None else fuel_kg
+        f1 = self.fuel_capacity_kg * self.fuel_reserve_frac if reserve else 0.0
+        m0 = self.empty_mass_kg + w + f0
+        m1 = self.empty_mass_kg + w + f1
+        b0 = self.fuel_burn_kg_h_at_mtow
+        hours = 2.0 * self.max_takeoff_kg ** 1.5 * (m1 ** -0.5 - m0 ** -0.5) / b0
+        return hours * 3600.0
 
 
 class AgentSpec(Contract):
@@ -1540,24 +1696,40 @@ DEFAULT_AGENT_SPECS: dict[ExtinguishingAgent, AgentSpec] = {
 
 
 def default_seeker_spec() -> PlatformSpec:
+    """Light electric multirotor scout. ASSUMPTIONS (context.md 6.3): 10 kg MTOW, 4 kg pack at 250 Wh/kg,
+    4 x 26" props. Hover ~1.07 kW, cruise ~0.92 kW (both incl. 48 W avionics) -> ~52 min. The option of a
+    VTOL fixed-wing seeker (~2.5 h) is an [OPEN] question in context.md."""
     return PlatformSpec(
-        kind=DroneKind.SEEKER, name="Seeker (heavy-lift airframe, light payload)",
-        empty_mass_kg=52.0, max_takeoff_kg=92.0, water_capacity_l=0.0,   # airframe: DJI Agras T50-class (SOURCED)
-        cruise_speed_mps=15.0, max_speed_mps=22.0, endurance_s=6 * 3600.0,  # speeds ASSUMED; 6 h = mid of 5-8 h
+        kind=DroneKind.SEEKER, name="Seeker (electric multirotor, 10 kg)", powertrain=Powertrain.ELECTRIC,
+        search_capable=True,
+        empty_mass_kg=10.0, max_takeoff_kg=10.0, water_capacity_l=0.0,   # empty includes 4 kg battery + 1 kg avionics
+        cruise_speed_mps=15.0, max_speed_mps=20.0, max_accel_mps2=4.0, endurance_s=3150.0,
         search_altitude_agl_m=80.0, avionics_mass_kg=1.0, avionics_power_w=48.0,
         thermal=ThermalCameraSpec(camera=CameraModel(width_px=640, height_px=512, hfov_deg=32.0)),
         lidar=LidarSpec(),
+        sensor_names=["thermal", "lidar", "gnss_rtk", "rangefinder", "comms", "compute", "power"],
+        battery_wh=1000.0, battery_usable_frac=0.8, hover_power_w=1070.0, cruise_power_w=915.0,
     )
 
 
 def default_extinguisher_spec() -> PlatformSpec:
+    """Ultra-heavy hybrid, Thunder-Wasp-GT class. SOURCED anchors: MTOW 800 kg, empty 375 kg, up to 248 kg fuel,
+    400 kg payload, cruise 70-90 km/h (ACC dossier). ASSUMED: +45 kg for hybrid drivetrain and 5 kWh buffer
+    (empty 420), tank 170 L, fuel 210 kg, burn 52 kg/h at MTOW (80 kg/h turbine fitted to ACC x 0.65 genset
+    factor). Gives ~5.1 h to dry / ~4.1 h with 15% reserve at full mass (hybrid_endurance_s())."""
     return PlatformSpec(
-        kind=DroneKind.EXTINGUISHER, name="Extinguisher (T50-class, 40 L)",
-        empty_mass_kg=52.0, max_takeoff_kg=92.0, water_capacity_l=40.0,  # T50: 52 kg w/ battery, 92 kg spray MTOW, 40 L (SOURCED)
-        cruise_speed_mps=15.0, max_speed_mps=22.0, endurance_s=6 * 3600.0,
-        search_altitude_agl_m=60.0, drop_height_agl_m=10.0, avionics_mass_kg=1.0, avionics_power_w=40.0,
+        kind=DroneKind.EXTINGUISHER, name="Extinguisher (hybrid ultra-heavy, 170 L)", powertrain=Powertrain.HYBRID,
+        search_capable=False,
+        empty_mass_kg=420.0, max_takeoff_kg=800.0, water_capacity_l=170.0,
+        cruise_speed_mps=20.0, max_speed_mps=25.0, max_accel_mps2=2.0, endurance_s=18000.0,
+        search_altitude_agl_m=120.0,   # transit altitude: above canopy + margin; stopping dist at 20 m/s is 100 m
+        drop_height_agl_m=15.0, drop_release_s=8.0, refill_time_s=120.0,
+        avionics_mass_kg=1.2, avionics_power_w=35.0,
         thermal=ThermalCameraSpec(camera=CameraModel(width_px=320, height_px=256, hfov_deg=50.0)),
-        lidar=LidarSpec(),
+        lidar=LidarSpec(),   # last-mile only: 40 m range cannot protect a 20 m/s heavy drone (100 m to stop)
+        sensor_names=["thermal", "lidar", "gnss_rtk", "rangefinder", "comms", "compute", "payload", "power"],
+        fuel_capacity_kg=210.0, fuel_density_kg_per_l=0.8, fuel_reserve_frac=0.15,
+        fuel_burn_kg_h_at_mtow=52.0, battery_buffer_wh=5000.0,
     )
 
 
@@ -1607,8 +1779,8 @@ class ScenarioConfig(Contract):
     grid: GridSpec = Field(default_factory=_default_grid)
     base_position: Position = Field(default_factory=lambda: Position(x=0.0, y=0.0, z=0.0))
 
-    n_seekers: int = Field(default=4, ge=0)
-    n_extinguishers: int = Field(default=6, ge=0)
+    n_seekers: int = Field(default=6, ge=0)        # ~52 min sorties, so plan for battery swaps
+    n_extinguishers: int = Field(default=2, ge=0)  # ultra-heavy: few, big, fuel-limited
     seeker_spec: PlatformSpec = Field(default_factory=default_seeker_spec)
     extinguisher_spec: PlatformSpec = Field(default_factory=default_extinguisher_spec)
 
@@ -1638,6 +1810,8 @@ class ScenarioConfig(Contract):
                 raise ValueError(f"duplicate {label} in scenario")
         if self.agent not in self.agent_specs:
             raise ValueError("agent has no entry in agent_specs")
+        if self.seeker_spec.kind is not DroneKind.SEEKER or self.extinguisher_spec.kind is not DroneKind.EXTINGUISHER:
+            raise ValueError("seeker_spec/extinguisher_spec have the wrong DroneKind")
         return self
 
 
@@ -1665,7 +1839,8 @@ def example_scenario() -> ScenarioConfig:
         ],
         stations=[
             RefillStation(station_id="S1", position=Position(x=0, y=0), water_available_l=20_000,
-                          fill_rate_lpm=60.0, total_bays=2, free_bays=2,
+                          fill_rate_lpm=300.0, total_bays=2, free_bays=2,
+                          fuel_available_kg=1500.0, fuel_rate_kg_per_min=30.0, battery_swap_s=120.0,
                           agents_available=[ExtinguishingAgent.WATER, ExtinguishingAgent.CLASS_A_FOAM]),
         ],
     )
@@ -1677,12 +1852,14 @@ def example_scenario() -> ScenarioConfig:
 
 ## 12. Open questions (for the human)
 
-1. `[OPEN]` **Payload class:** keep the T50-class 40 L default, or model an ultra-heavy (ThunderWasp-class) airframe? Drives swarm size and refill logistics.
+1. ~~Payload class~~ **Resolved 2026-11-07:** ultra-heavy hybrid extinguisher (Thunder-Wasp class), light electric seekers.
+1b. `[OPEN]` **Seeker airframe:** electric multirotor (default, can hover to confirm, ~52 min) vs electric VTOL fixed-wing (~2.5 h, no hover).
+1c. `[VERIFY]` **Hybrid factor ×0.65 / 5 h rating:** is a heavy-fuel genset really ~35% more efficient than a small turbine? If not, endurance is ~3.3 h with 170 L, or shrink the tank to ~120 L for 5+ h (table in §6.2).
 2. `[OPEN]` **Leaders:** one global leader (+standby) or cluster leaders per area?
 3. `[OPEN]` **Human gate:** require ground approval before the first drop, or only before new water sources?
 4. `[OPEN]` **Scenario site and area:** default is a 4 km × 4 km grid at 2 m cells around a placeholder central-Alberta origin.
 5. `[OPEN]` **Sim engine owner** (see §2) and **evaluation harness owner**.
-6. `[OPEN]` **Intake method** for water bodies (bucket vs hose + pump) and whether generator mass should be modelled.
+6. `[OPEN]` **Intake method** for water bodies (bucket vs hose + pump vs onboard tank) and whether foam dosing is realistic with a bucket; engine-life limit on continuous hours.
 7. `[VERIFY]` Alberta/Canadian rules on drawing water from natural sources and on foam/retardant near waterways.
 8. `[VERIFY]` Export/availability limits on thermal cameras (frame rate, licensing) for any real hardware.
 
@@ -1692,6 +1869,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-07 | follow-up chat | v0.2 / contracts 0.2.0: ultra-heavy hybrid extinguisher (800 kg MTOW, 170 L, 210 kg fuel), electric 10 kg seeker, trimmed extinguisher sensors, fuel/generator telemetry, refuel in refill, partial drops, sizing script; basin math redone with fuel (56 tests) | team decision: FireSwarm-style extinguisher, electric seekers |
 | 2026-11-07 | initial chat | Created context v0.1 and contracts 0.1.0 (49 tests passing); sensor baseline reviewed against FireSwarm; added agents, refill/basin, gas-sensing and ML-data sections | project kickoff for parallel work |
 
 ---
@@ -1702,7 +1880,10 @@ def example_scenario() -> ScenarioConfig:
 - **S2** ASCE, FireSwarm automated aerial firefighting — https://www.asce.org/publications-and-news/civil-engineering-source/article/2025/07/24/automated-aerial-firefighting-drones-to-provide-faster-responses
 - **S3** CTIF, 400 kg water-bombing drones in Canada — https://ctif.org/news/heavy-duty-water-bombing-drones-able-lift-400-kilos-are-being-tested-canadian-forest-fire
 - **S4** Strategic × FireSwarm partnership — https://newswire.ca/news-releases/revolutionary-drone-technology-for-battling-wildfires-takes-major-step-forward-with-new-partnership-840102801.html
-- **S5** DJI Agras T50 — https://ag.dji.com/fr/t50/specs · reseller specs/hover times https://druav.com/products/dji-agras-t50-agriculture-drone · battery/radar https://volatusdrones.com/products/dji-agras-t50-drone-ready-to-fly-spray-bundle
+- **S17** ACC Thunder Wasp GT dossier (MTOW, fuel, endurance, turbine, bucket) — https://www.uncrewed-systems.com/?p=13251 · https://ust-media.com/ust-magazine/UST059/38 · https://ust-media.com/ust-magazine/UST059/32 · https://www.uncrewed-systems.com/content/uploads/magazines/Issue%20059/36/
+- **S18** FireSwarm Thunder Wasp GT (hybrid-electric, 4 props, 378.5 L) — https://evtol.news/fireswarm-solutions-thunderwasp-gt
+- **S19** Unvalidated payload/endurance claims, ash/heat risk — https://robotics.press/companies/fireswarm-solutions/
+- **S5** DJI Agras T50 (reference only) — https://ag.dji.com/fr/t50/specs · reseller specs/hover times https://druav.com/products/dji-agras-t50-agriculture-drone · battery/radar https://volatusdrones.com/products/dji-agras-t50-drone-ready-to-fly-spray-bundle
 - **S6** US initial-attack drone fleets — https://www.yahoo.com/news/articles/san-bernardino-co-fire-dept-211235723.html · https://www.techspot.com/news/113180-us-fire-departments-test-autonomous-drones-fight-wildfires.html
 - **S7** FLIR Boson+ — https://www.acalbfi.com/nl/file/16132/Boson-Plus-Datasheet.pdf · https://oemcameras.com/?p=4033 · Hadron 640R https://w-technika.cz/cdn/shop/files/hadron20640r20datasheet.pdf
 - **S8** Livox Mid-360 — https://www.livoxtech.com/mid-360/specs · https://www.mybotshop.de/Livox-Mid360S_1
