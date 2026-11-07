@@ -9,16 +9,18 @@ import pytest
 
 pytest.importorskip("scipy")
 
-from contracts import CameraModel, GridSpec, Pose, Position, ThermalFrame  # noqa: E402
+from contracts import CameraModel, GridSpec, HotspotStatus, Pose, Position, ThermalFrame  # noqa: E402
 from perception.detectors import (  # noqa: E402
-    ConstantClassifier, FakeDetector, FusedDetector, ThresholdDetector, TruthSource,
+    ConstantClassifier, ExclusionZone, FakeDetector, FusedDetector, HotBypassRule, ThresholdDetector, TruthSource,
 )
 from perception.evaluation import (  # noqa: E402
     average_precision, binary_metrics, choose_threshold_recall_first, gt_objects_from_mask, match_detections, roc_auc,
 )
 from perception.georef import FlatGroundGeoreferencer, TerrainGeoreferencer, footprint_corners, world_to_pixel  # noqa: E402
 from perception.mapping import LogOddsMap  # noqa: E402
-from perception.patches import PATCH_SPEC, extract_patch, extract_patches, normalize_patch  # noqa: E402
+from perception.patches import (  # noqa: E402
+    PATCH_SPEC, extract_patch, extract_patch_scaled, extract_patches, normalize_patch,
+)
 from perception.pipeline import SeekerPerception  # noqa: E402
 from perception.results_doc import update_section  # noqa: E402
 from perception.synth import SynthObject, SynthParams, planck_radiance, radiance_to_temp, synth_frame  # noqa: E402
@@ -109,16 +111,54 @@ def test_threshold_detector_quiet_on_empty_night():
     assert ThresholdDetector().blobs(temp) == []
 
 
-def test_fused_detector_threshold_and_hot_bypass():
+def test_hot_bypass_rule_saturation_single_pixel_and_exclusion():
     rng = np.random.default_rng(0)
-    temp, _ = synth_frame(rng, [SynthObject("fire", 60, 60, 1.0, 500), SynthObject("rock", 180, 180, 3.0, 35)],
-                          SynthParams())
+    p = SynthParams()
+    # 700 C core clips at the 550 C saturation -> many pixels >= 0.9 x 550; the 35 C rock never bypasses
+    temp, _ = synth_frame(rng, [SynthObject("fire", 60, 60, 1.0, 700), SynthObject("rock", 180, 180, 3.0, 35)], p)
     frame = ThermalFrame("s1", 0.0, temp, nadir_pose(), CAM)
     reject_all = FusedDetector(ConstantClassifier(p=0.0, threshold=0.5))
-    dets = reject_all.detect(frame)
-    assert len(dets) == 1 and dets[0].peak_temp_c >= 300  # only the bypassed hot fire survives
-    assert FusedDetector(ConstantClassifier(p=0.0), hot_bypass_c=None).detect(frame) == []
-    assert len(FusedDetector(ConstantClassifier(p=1.0)).detect(frame)) == 2
+    dets = reject_all.detect(frame, gsd_m=p.gsd_m)
+    assert len(dets) == 1 and dets[0].peak_temp_c >= 495
+    assert "saturated" in reject_all.last_bypass_reasons
+    # an exclusion zone (friendly drone) removes the bypass privilege, so the CNN's "no" stands
+    zone = ExclusionZone(dets[0].u, dets[0].v, 20.0, "friendly_drone")
+    assert reject_all.detect(frame, gsd_m=p.gsd_m, exclusions=[zone]) == []
+    assert "excluded:friendly_drone" in reject_all.last_bypass_reasons
+    # high gain mode (saturation ~150 C): trigger follows the camera, not a fixed number
+    assert HotBypassRule().with_saturation(150.0).trigger_c == pytest.approx(135.0)
+    assert len(FusedDetector(ConstantClassifier(p=1.0)).detect(frame, gsd_m=p.gsd_m)) == 2
+    # a single hot (dead) pixel must not bypass
+    cold = np.full((64, 64), 8.0, np.float32)
+    cold[30, 30] = 549.0
+    det = FusedDetector(ConstantClassifier(p=0.0))
+    assert det.detect(ThermalFrame("s1", 0.0, cold, nadir_pose(), CAM), gsd_m=0.072) == []
+
+
+def test_hot_bypass_oversize_blob():
+    temp = np.full((128, 128), 8.0, np.float32)
+    temp[20:100, 20:100] = 200.0  # 80 px wide hot area, far larger than the 32 px patch window
+    det = FusedDetector(ConstantClassifier(p=0.0))
+    dets = det.detect(ThermalFrame("s1", 0.0, temp, nadir_pose(), CAM), gsd_m=0.072)
+    assert len(dets) == 1 and det.last_bypass_reasons == ["oversize"]
+    temp[20:100, 20:100] = 40.0  # same size but only warm (sun-warmed rock / vehicle): no bypass
+    assert det.detect(ThermalFrame("s1", 0.0, temp, nadir_pose(), CAM), gsd_m=0.072) == []
+
+
+def test_scale_normalized_patch_is_altitude_invariant():
+    """The same 1 m^2 fire imaged at 80 m and 30 m AGL gives similar normalized patches when scale-normalized."""
+    obj = SynthObject("fire", 128, 128, 1.0, 400)
+    patches = {}
+    for agl in (80.0, 30.0):
+        gsd = CAM.ground_sample_distance_m(agl)
+        prm = SynthParams(gsd_m=gsd, terrain_sigma_c=0.01, netd_c=0.0)
+        temp, _ = synth_frame(np.random.default_rng(1), [obj], prm)
+        patches[agl] = (extract_patch_scaled(temp, 128, 128, gsd), extract_patch(temp, 128, 128))
+    hot = lambda x: (x > 60).sum()  # noqa: E731
+    scaled_ratio = hot(patches[30][0]) / hot(patches[80][0])
+    plain_ratio = hot(patches[30][1]) / hot(patches[80][1])
+    assert 0.6 < scaled_ratio < 1.6       # same ground window -> similar hot area
+    assert plain_ratio > 4                # plain crop: ~(80/30)^2 = 7x more hot pixels up close
 
 
 # ---------- metrics ----------
@@ -253,3 +293,151 @@ def test_mask_audit_flags_threshold_masks_but_not_physical_masks():
         phys_rows.append(threshold_fit(temp, mask))
     assert verdict(thr_rows).startswith("THRESHOLD-GENERATED")
     assert not verdict(phys_rows).startswith("THRESHOLD-GENERATED")
+
+
+# ---------- thresholds for the confirm stage ----------
+
+def test_precision_first_threshold():
+    from perception.evaluation import choose_threshold_precision_first
+
+    y = np.array([1, 1, 1, 1, 0, 0, 0, 0, 1, 0])
+    s = np.array([.9, .8, .7, .6, .65, .3, .2, .1, .05, .5])
+    r = choose_threshold_precision_first(y, s, 1.0)
+    assert r["met_target"] and r["precision"] == 1.0 and r["threshold"] == 0.7 and r["recall"] == 0.6
+
+
+# ---------- sensor wiring ----------
+
+def test_lens_distortion_round_trip_and_georef_correction():
+    from perception.distortion import LensDistortion
+
+    lens = LensDistortion(k1=-0.1, k2=0.01, p1=0.001)
+    u, v = lens.distort_uv(600.0, 40.0, CAM)
+    assert (u, v) != (600.0, 40.0)
+    uu, vv = lens.undistort_uv(u, v, CAM)
+    assert abs(uu - 600.0) < 1e-6 and abs(vv - 40.0) < 1e-6
+    pose, truth = nadir_pose(), Position(x=20.0, y=16.0)
+    obs = world_to_pixel(truth, pose, CAM, lens)                      # what a real lens records
+    naive = FlatGroundGeoreferencer().pixel_to_world(*obs, pose, CAM)  # pinhole assumption: wrong at the edge
+    fixed = FlatGroundGeoreferencer(distortion=lens).pixel_to_world(*obs, pose, CAM)
+    assert naive.distance_to(truth) > 0.2 and fixed.distance_to(truth) < 1e-4
+
+
+def test_pose_buffer_interpolates_and_rejects_stale():
+    from perception.frame_context import PoseBuffer
+
+    pb = PoseBuffer(max_gap_s=0.5, max_extrapolation_s=0.05)
+    pb.add(0.0, Pose(position=Position(x=0, y=0, z=80), yaw_deg=350))
+    pb.add(0.1, Pose(position=Position(x=1.5, y=0, z=80), yaw_deg=10))
+    mid = pb.at(0.05)
+    assert mid.position.x == pytest.approx(0.75) and mid.yaw_deg == pytest.approx(0.0, abs=1e-9)  # wraps through N
+    assert pb.at(0.12) is not None and pb.at(0.3) is None and pb.at(-1.0) is None
+
+
+def test_dem_sampler_bilinear_and_terrain_georef():
+    from perception.terrain import DemSampler
+
+    grid = GridSpec(origin=Position(x=-100, y=-100), resolution_m=10.0, rows=20, cols=20)
+    xs = -100 + (np.arange(20) + 0.5) * 10
+    heights = np.tile(0.1 * xs, (20, 1))  # 10% slope rising to the east
+    dem = DemSampler(heights, grid)
+    assert dem(5.0, 0.0) == pytest.approx(0.5)
+    pose = nadir_pose(z=80.0)
+    on_dem = TerrainGeoreferencer(dem, step_m=0.25).pixel_to_world(640, 256, pose, CAM)
+    flat = FlatGroundGeoreferencer(0.0).pixel_to_world(640, 256, pose, CAM)
+    assert abs(on_dem.z - dem(on_dem.x, on_dem.y)) < 0.05
+    assert on_dem.x < flat.x  # rising ground meets the ray earlier
+
+
+def _fake_pipeline(**kw):
+    truth = [TruthSource("F1", Position(x=5, y=5), 2.0, 450.0)]
+    det = FakeDetector(lambda now: truth, seed=3, p_decoy=0.0, clutter_rate=0.0)
+    grid = GridSpec(origin=Position(x=-200, y=-200), resolution_m=2.0, rows=200, cols=200)
+    return SeekerPerception("s1", det, grid=grid, **kw)
+
+
+def test_pipeline_skips_ffc_and_bad_thermal_without_writing_misses():
+    from perception.frame_context import FrameContext
+
+    perc = _fake_pipeline()
+    f = ThermalFrame("s1", 1.0, np.zeros((0, 0)), nadir_pose(), CAM)
+    assert perc.process(f, FrameContext(ffc_active=True)) == []
+    assert perc.process(f, FrameContext(thermal_ok=False)) == []
+    assert perc.map.pop_updates() == [] and perc.stats.skipped_ffc == 1 and perc.stats.skipped_thermal == 1
+    assert perc.process(f, FrameContext()) and perc.map.pop_updates()
+
+
+def test_pipeline_rtk_loss_widens_gate_and_uses_altimeter():
+    from perception.frame_context import FrameContext
+
+    perc = _fake_pipeline()
+    f = ThermalFrame("s1", 1.0, np.zeros((0, 0)), nadir_pose(), CAM)
+    perc.process(f, FrameContext())
+    # simulate a 6 m GNSS jump without RTK: still the same hotspot (gate 5 m + 3 m), not a duplicate
+    jumped = ThermalFrame("s1", 2.0, np.zeros((0, 0)), nadir_pose(x=-6.0), CAM)
+    perc.process(jumped, FrameContext(gnss_rtk_ok=False, agl_m=80.0))
+    assert len(perc.tracker.tracks) == 1 and perc.stats.rtk_lost_frames == 1 and perc.stats.altimeter_used == 1
+    perc.process(f, FrameContext(agl_m=500.0))  # beyond the altimeter's rated range -> ignored
+    assert perc.stats.altimeter_used == 1
+
+
+def test_pipeline_pose_buffer_used_at_exposure_time():
+    from perception.frame_context import PoseBuffer
+
+    pb = PoseBuffer()
+    pb.add(0.4, nadir_pose(x=0.0))
+    pb.add(0.6, nadir_pose(x=3.0))
+    perc = _fake_pipeline(pose_buffer=pb)
+    stale_pose_in_frame = nadir_pose(x=999.0)  # must be replaced by the buffered pose at t = 0.5
+    out = perc.process(ThermalFrame("s1", 0.5, np.zeros((0, 0)), stale_pose_in_frame, CAM))
+    assert out and out[0].position.distance_to(Position(x=5, y=5), horizontal=True) < 1.0
+    assert perc.process(ThermalFrame("s1", 5.0, np.zeros((0, 0)), nadir_pose(), CAM)) == []
+    assert perc.stats.skipped_stale_pose == 1
+
+
+# ---------- close-range confirm / verify ----------
+
+def test_confirmer_confirms_fire_and_rejects_decoy():
+    from perception.confirm import HotspotConfirmer
+
+    p = SynthParams(gsd_m=CAM.ground_sample_distance_m(30.0))
+    rng = np.random.default_rng(5)
+    clf_fire = ConstantClassifier(p=0.97, threshold=0.3, confirm_threshold=0.9)
+    conf = HotspotConfirmer(clf_fire, min_frames=5)
+    for _ in range(6):
+        temp, _ = synth_frame(rng, [SynthObject("fire", 128, 128, 0.5, 400)], p)
+        conf.add_uv(temp, (128.0, 128.0), p.gsd_m)
+    assert conf.result().status is HotspotStatus.CONFIRMED
+    rock = HotspotConfirmer(ConstantClassifier(p=0.05, threshold=0.3, confirm_threshold=0.9), min_frames=5)
+    for _ in range(6):
+        temp, _ = synth_frame(rng, [SynthObject("rock", 128, 128, 3.0, 35)], p)
+        rock.add_uv(temp, (128.0, 128.0), p.gsd_m)
+    r = rock.result()
+    assert r.status is HotspotStatus.FALSE_POSITIVE and r.seen_frac == 1.0
+    assert HotspotConfirmer(clf_fire).result().status is None  # too few frames
+
+
+def test_suppression_checker():
+    from perception.confirm import SuppressionChecker
+
+    p = SynthParams(gsd_m=CAM.ground_sample_distance_m(15.0))
+    rng = np.random.default_rng(6)
+    still = SuppressionChecker()
+    out = SuppressionChecker()
+    for _ in range(6):
+        hot, _ = synth_frame(rng, [SynthObject("fire", 128, 128, 0.3, 300)], p)
+        cold, _ = synth_frame(rng, [], p)
+        still.add_uv(hot, (128.0, 128.0), p.gsd_m)
+        out.add_uv(cold, (128.0, 128.0), p.gsd_m)
+    assert out.result().status is HotspotStatus.SUPPRESSED
+    assert still.result().status is None and "still hot" in still.result().reason
+
+
+def test_confirm_threshold_never_below_search_threshold():
+    from training.cv import evaluate_oof
+
+    y = np.array([1] * 50 + [0] * 50)
+    oof = np.r_[np.linspace(0.6, 1.0, 50), np.linspace(0.0, 0.3, 50)]  # perfectly separable, "easy" data
+    folds = [(np.arange(100) % 2 == k, np.nonzero(np.arange(100) % 2 == k)[0]) for k in (0, 1)]
+    cv = evaluate_oof(y, oof, folds, 0.95, 0.98)
+    assert cv["confirm_threshold"]["threshold"] >= cv["final_threshold"]["threshold"]

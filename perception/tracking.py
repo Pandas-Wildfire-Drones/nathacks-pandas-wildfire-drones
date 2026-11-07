@@ -31,6 +31,7 @@ class Observation:
     peak_temp_c: float
     area_m2: float
     timestamp: float
+    pos_weight: float = 1.0  # multiplies confidence in the position average (e.g. 0.25 when RTK is lost)
 
 
 @dataclass
@@ -79,12 +80,14 @@ class HotspotTracker:
         slope = np.polyfit(ts, areas, 1)[0]  # m^2 per second
         return float(slope * 60.0)
 
-    def update(self, observations: list[Observation]) -> list[Hotspot]:
-        """Fuse one frame's observations. Returns the hotspots that changed (new or updated)."""
+    def update(self, observations: list[Observation], gate_m: float | None = None) -> list[Hotspot]:
+        """Fuse one frame's observations. Returns the hotspots that changed (new or updated).
+        gate_m overrides the association gate for this frame (wider when GNSS-RTK is lost)."""
+        gate = self.gate_m if gate_m is None else gate_m
         changed: dict[str, _Track] = {}
         used: set[int] = set()
         for ob in sorted(observations, key=lambda o: -o.confidence):
-            best, best_d = None, self.gate_m
+            best, best_d = None, gate
             for i, t in enumerate(self.tracks):
                 if i in used:
                     continue  # one observation per track per frame
@@ -93,7 +96,7 @@ class HotspotTracker:
                     best, best_d = i, d
             if best is None:
                 t = _Track(hotspot_id=f"{self.id_prefix}-H{self._next}", x=ob.position.x, y=ob.position.y,
-                           z=ob.position.z, w=ob.confidence, log_odds=_logit(ob.confidence), peak=ob.peak_temp_c,
+                           z=ob.position.z, w=max(ob.confidence * ob.pos_weight, 1e-3), log_odds=_logit(ob.confidence), peak=ob.peak_temp_c,
                            area=ob.area_m2, first_seen=ob.timestamp, last_seen=ob.timestamp,
                            history=[(ob.timestamp, ob.area_m2)])
                 self._next += 1
@@ -102,7 +105,7 @@ class HotspotTracker:
             else:
                 t = self.tracks[best]
                 used.add(best)
-                w = max(ob.confidence, 1e-3)
+                w = max(ob.confidence * ob.pos_weight, 1e-3)
                 t.x, t.y, t.z = ((t.x * t.w + ob.position.x * w) / (t.w + w), (t.y * t.w + ob.position.y * w) / (t.w + w),
                                  (t.z * t.w + ob.position.z * w) / (t.w + w))
                 t.w += w

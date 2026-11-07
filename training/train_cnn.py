@@ -20,7 +20,9 @@ import numpy as np
 import torch
 from torch import nn
 
+from contracts import default_seeker_spec
 from perception.datasets import load_manifest
+from perception.detectors.fused import HotBypassRule
 from perception.patches import PATCH_SPEC, normalize_patches
 from perception.results_doc import fmt_metric_table, update_section
 
@@ -112,12 +114,33 @@ def check_onnx_parity(model: TinyFireNet, path: Path, x_c: np.ndarray) -> float:
     return float(np.max(np.abs(onnx_logits - torch_logits)))
 
 
-def cv_markdown(tag: str, stats: dict, cv: dict, args) -> str:
+def negative_peak_stats(ps: PatchSet, rule: HotBypassRule) -> dict:
+    """Data check for the hot-blob bypass (docs/decisions/0003): how hot do NON-fire patches get?
+    If any negative reaches the bypass trigger, the bypass would let that decoy through without the CNN."""
+    # Central half of the patch only (~the blob), so a NEIGHBOURING fire at the patch edge doesn't count. Still an
+    # upper bound: the real (blob-based) count on the test split is reported by perception/evaluate.py.
+    q = ps.patches_c.shape[1] // 4
+    core = ps.patches_c[:, q:-q, q:-q]
+    peaks = core.reshape(len(ps.y), -1).max(1)
+    neg = peaks[ps.y == 0]
+    n_hot = (core[ps.y == 0] >= rule.trigger_c).reshape(len(neg), -1).sum(1) if len(neg) else np.zeros(0)
+    out = {"trigger_c": rule.trigger_c, "saturation_c": rule.saturation_c, "n_negatives": int(len(neg))}
+    if len(neg):
+        out.update(neg_peak_p99_c=float(np.percentile(neg, 99)), neg_peak_p999_c=float(np.percentile(neg, 99.9)),
+                   neg_peak_max_c=float(neg.max()),
+                   negatives_that_would_bypass=int((n_hot >= rule.min_hot_px).sum()))
+    return out
+
+
+def cv_markdown(tag: str, stats: dict, cv: dict, args, bypass_check: dict | None = None) -> str:
     s, fin = cv["summary"], cv["final_threshold"]
     rows = [(f"fold {m['fold']} (n={m['n']}, pos={m['positives']}, thr={m['threshold']:.3f})", m) for m in cv["per_fold"]]
     rows.append(("**mean ± std over folds**", s))
     rows.append((f"pooled OOF @ final thr {fin['threshold']:.3f}", cv["pooled_oof_at_final_threshold"]))
     rows.append(("pooled OOF @ 0.5 (reference)", cv["pooled_oof_at_0.5"]))
+    ct = cv["confirm_threshold"]
+    rows.append((f"CONFIRM op. point @ {ct['threshold']:.3f} (precision >= {ct['min_precision']})",
+                 cv["pooled_oof_at_confirm_threshold"]))
     warn = "" if fin["met_target"] else f"\n\n**WARNING: recall target {fin['min_recall']} not reached on OOF.**"
     return "\n".join([
         f"### CNN verifier (PRIMARY): {len(cv['per_fold'])}-fold group CV · {tag}", "",
@@ -127,7 +150,14 @@ def cv_markdown(tag: str, stats: dict, cv: dict, args) -> str:
         f"threshold is chosen on the other folds. Epochs {args.epochs}, width {args.width}, augment {args.augment}.",
         "", fmt_metric_table(rows, ("precision", "recall", "f1", "f2", "accuracy", "ap", "roc_auc")) + warn,
         "", "Accuracy is shown for completeness only (class imbalance makes it misleading; see perception/evaluation.py).",
-    ])
+        f"Patches scale-normalized by GSD: {stats.get('scale_normalized')}.",
+    ] + ([
+        "", f"**Hot-blob bypass data check** (trigger {bypass_check['trigger_c']:.0f} °C = 0.9 × saturation "
+        f"{bypass_check['saturation_c']:.0f} °C): hottest non-fire patch {bypass_check.get('neg_peak_max_c', float('nan')):.1f} °C "
+        f"(p99.9 {bypass_check.get('neg_peak_p999_c', float('nan')):.1f} °C, patch centre); non-fire patches that could bypass "
+        f"the CNN (upper bound): **{bypass_check.get('negatives_that_would_bypass', 0)}** of {bypass_check['n_negatives']}. "
+        "The blob-based count on the test split is in the pipeline section.",
+    ] if bypass_check else []))
 
 
 def main() -> None:
@@ -145,9 +175,14 @@ def main() -> None:
     ap.add_argument("--weight-decay", type=float, default=1e-4)
     ap.add_argument("--width", type=int, default=16)
     ap.add_argument("--max-pos-weight", type=float, default=20.0)
-    ap.add_argument("--min-recall", type=float, default=0.95)
+    ap.add_argument("--min-recall", type=float, default=0.95, help="SEARCH operating point")
+    ap.add_argument("--min-precision", type=float, default=0.98, help="CONFIRM operating point (close range)")
+    ap.add_argument("--saturation-c", type=float, default=default_seeker_spec().thermal.saturation_temp_c,
+                    help="camera saturation for the active gain mode (bypass data check)")
     ap.add_argument("--no-augment", dest="augment", action="store_false")
     ap.add_argument("--weak-labels", action="store_true", help="label proposals in mask-less fire frames positive")
+    ap.add_argument("--no-scale-normalize", dest="scale_normalize", action="store_false",
+                    help="plain pixel crops even if the manifest has gsd_m (A/B for decision 0004)")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
@@ -161,12 +196,13 @@ def main() -> None:
     if args.patch_cache:
         ps = PatchSet.load(args.patch_cache)
         stats = {"patches": len(ps.y), "positives": int(ps.y.sum()), "negatives": int((ps.y == 0).sum()),
-                 "groups": len(set(ps.groups)), "proposal_negatives_hard": int(((ps.origin == "proposal") & (ps.y == 0)).sum())}
+                 "groups": len(set(ps.groups)), "scale_normalized": ps.scale_normalized,
+                 "proposal_negatives_hard": int(((ps.origin == "proposal") & (ps.y == 0)).sum())}
     else:
         recs = load_manifest(args.manifest, split="train")
         if not recs:
             raise SystemExit("no split == 'train' rows: run `python -m training.make_split` first")
-        ps = build_patch_set(recs, weak_labels=args.weak_labels, seed=args.seed)
+        ps = build_patch_set(recs, weak_labels=args.weak_labels, seed=args.seed, scale_normalize=args.scale_normalize)
         stats = ps.stats
         ps.save(out / "patches.npz")
     print(f"[train_cnn] patches: {json.dumps(stats)}")
@@ -176,7 +212,9 @@ def main() -> None:
     for k, (tr, va) in enumerate(folds):
         model = train_model(ps.patches_c[tr], ps.y[tr], args, device, seed=args.seed + k, log_prefix=f"[fold {k}] ")
         oof[va] = predict(model, ps.patches_c[va], device)
-    cv = evaluate_oof(ps.y, oof, folds, args.min_recall)
+    cv = evaluate_oof(ps.y, oof, folds, args.min_recall, args.min_precision)
+    bypass_check = negative_peak_stats(ps, HotBypassRule(saturation_c=args.saturation_c))
+    print(f"[bypass check] {bypass_check}")
     print(json.dumps(cv["summary"], indent=1))
 
     final = train_model(ps.patches_c, ps.y, args, device, seed=args.seed + 100, log_prefix="[final] ")
@@ -189,12 +227,18 @@ def main() -> None:
 
     meta = {
         "model_kind": "cnn", "architecture": "TinyFireNet", "width": args.width, "patch_spec": PATCH_SPEC.to_dict(),
-        "input_name": "patches", "output": "logits (apply sigmoid)",
+        "input_name": "patches", "output": "logits (apply sigmoid)", "scale_normalized": ps.scale_normalized,
         "threshold": cv["final_threshold"]["threshold"], "threshold_rule": f"recall>={args.min_recall} then max precision (pooled OOF)",
+        "confirm_threshold": cv["confirm_threshold"]["threshold"],
+        "reject_threshold": cv["reject_threshold"]["threshold"],
+        "reject_threshold_rule": "recall>=0.99 (pooled OOF): below this a close-range candidate is FALSE_POSITIVE",
+        "confirm_threshold_rule": f"precision>={args.min_precision} then max recall (pooled OOF, single patch)",
+        "bypass_check": bypass_check,
         "cv_summary": cv["summary"], "patch_stats": stats, "manifest": str(args.manifest), "tag": tag,
         "epochs": args.epochs, "seed": args.seed, "onnx_parity_max_abs": parity,
         "created": dt.datetime.now().isoformat(timespec="seconds"), "torch": torch.__version__,
     }
+    np.savez_compressed(out / "oof.npz", y=ps.y, oof=oof, groups=ps.groups)  # re-derive thresholds without retraining
     (out / "fire_cnn.json").write_text(json.dumps(meta, indent=2, default=float))
     (out / "cv.json").write_text(json.dumps({"cv": cv, "args": vars(args)}, indent=2, default=float))
     if args.export_to:
@@ -203,7 +247,7 @@ def main() -> None:
         shutil.copy(onnx_path, dst)
         shutil.copy(out / "fire_cnn.json", dst.with_suffix(".json"))
         print(f"[export] copied to {dst}")
-    update_section(args.results_doc, f"cnn_cv_{tag}", cv_markdown(tag, stats, cv, args),
+    update_section(args.results_doc, f"cnn_cv_{tag}", cv_markdown(tag, stats, cv, args, bypass_check),
                    {"cv": cv, "meta": meta})
     print(f"[results] updated {args.results_doc}")
 

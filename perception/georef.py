@@ -8,7 +8,10 @@ For a nadir camera at yaw 0: image top (v = 0) points NORTH, image right (u = W)
 
 Error budget at 80 m AGL (why the tracker gates at ~5 m): 1 deg of attitude error ~ 1.4 m on the ground;
 RTK ~ 0.02 m; flat-ground assumption on a 10% slope ~ several metres off-nadir. Use TerrainGeoreferencer with
-a DEM height function when the scenario has terrain.
+a DEM height function when the scenario has terrain (perception.terrain.DemSampler).
+
+Lens distortion: pass a LensDistortion to the georeferencers / world_to_pixel; observed pixels are undistorted
+before the pinhole ray is built (docs/decisions/0002). None = ideal pinhole.
 """
 from __future__ import annotations
 
@@ -18,6 +21,8 @@ from typing import Callable
 import numpy as np
 
 from contracts import CameraModel, Pose, Position
+
+from .distortion import LensDistortion
 
 __all__ = ["camera_axes", "pixel_ray", "FlatGroundGeoreferencer", "TerrainGeoreferencer", "world_to_pixel",
            "footprint_corners"]
@@ -48,8 +53,11 @@ def _focal_px(camera: CameraModel) -> float:
     return (camera.width_px / 2.0) / math.tan(math.radians(camera.hfov_deg) / 2.0)
 
 
-def pixel_ray(u: float, v: float, pose: Pose, camera: CameraModel) -> np.ndarray:
-    """Unnormalized ENU direction of the ray through pixel (u, v). Pixel centres are at integer + 0.5."""
+def pixel_ray(u: float, v: float, pose: Pose, camera: CameraModel,
+              distortion: LensDistortion | None = None) -> np.ndarray:
+    """Unnormalized ENU direction of the ray through observed pixel (u, v). Pixel centres are at integer + 0.5."""
+    if distortion is not None:
+        u, v = distortion.undistort_uv(u, v, camera)
     axis, right, img_up = camera_axes(pose, camera)
     f = _focal_px(camera)
     cx, cy = camera.width_px / 2.0, camera.height_px / 2.0
@@ -59,11 +67,12 @@ def pixel_ray(u: float, v: float, pose: Pose, camera: CameraModel) -> np.ndarray
 class FlatGroundGeoreferencer:
     """Intersect the pixel ray with the plane z = ground_z (default: the scenario datum)."""
 
-    def __init__(self, ground_z: float = 0.0):
+    def __init__(self, ground_z: float = 0.0, distortion: LensDistortion | None = None):
         self.ground_z = ground_z
+        self.distortion = distortion
 
     def pixel_to_world(self, u: float, v: float, pose: Pose, camera: CameraModel) -> Position | None:
-        ray = pixel_ray(u, v, pose, camera)
+        ray = pixel_ray(u, v, pose, camera, self.distortion)
         c = pose.position
         if ray[2] >= -1e-9:
             return None  # at or above the horizon
@@ -76,11 +85,13 @@ class FlatGroundGeoreferencer:
 class TerrainGeoreferencer:
     """Ray-march against a height function z = ground_z(x, y) (e.g. a DEM sampler). Step = step_m along the ray."""
 
-    def __init__(self, ground_z: Callable[[float, float], float], step_m: float = 1.0, max_range_m: float = 2000.0):
+    def __init__(self, ground_z: Callable[[float, float], float], step_m: float = 1.0, max_range_m: float = 2000.0,
+                 distortion: LensDistortion | None = None):
         self.ground_z, self.step_m, self.max_range_m = ground_z, step_m, max_range_m
+        self.distortion = distortion
 
     def pixel_to_world(self, u: float, v: float, pose: Pose, camera: CameraModel) -> Position | None:
-        ray = pixel_ray(u, v, pose, camera)
+        ray = pixel_ray(u, v, pose, camera, self.distortion)
         ray = ray / np.linalg.norm(ray)
         c = np.array([pose.position.x, pose.position.y, pose.position.z])
         prev_t, prev_h = 0.0, c[2] - self.ground_z(c[0], c[1])
@@ -98,8 +109,9 @@ class TerrainGeoreferencer:
         return None
 
 
-def world_to_pixel(point: Position, pose: Pose, camera: CameraModel) -> tuple[float, float] | None:
-    """Project a world point into the image. None if behind the camera or outside the frame."""
+def world_to_pixel(point: Position, pose: Pose, camera: CameraModel,
+                   distortion: LensDistortion | None = None) -> tuple[float, float] | None:
+    """Project a world point into the (distorted, if given) image. None if behind the camera or outside the frame."""
     axis, right, img_up = camera_axes(pose, camera)
     w = np.array([point.x - pose.position.x, point.y - pose.position.y, point.z - pose.position.z])
     zc = float(w @ axis)
@@ -108,6 +120,8 @@ def world_to_pixel(point: Position, pose: Pose, camera: CameraModel) -> tuple[fl
     f = _focal_px(camera)
     u = camera.width_px / 2.0 + f * float(w @ right) / zc
     v = camera.height_px / 2.0 - f * float(w @ img_up) / zc
+    if distortion is not None:
+        u, v = distortion.distort_uv(u, v, camera)
     if 0 <= u < camera.width_px and 0 <= v < camera.height_px:
         return u, v
     return None

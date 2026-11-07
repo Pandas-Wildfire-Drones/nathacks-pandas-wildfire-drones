@@ -160,7 +160,7 @@ def main() -> None:
         f"| median hole fraction | {summary['median_hole_frac']:.3f} | > 0 (hand polygons ≈ 0) |",
         f"| median coldest masked pixel (°C) | {summary['median_min_in_c']:.1f} | = the threshold |",
         "", "If threshold-made: hand-check the TEST split masks against RGB, and report frame-level results from "
-        "human Fire/No-Fire labels too (training/DATA_SOURCES.md).",
+        "human Fire/No-Fire labels too (exclude/DATA_SOURCES.md).",
     ])
     update_section(a.results_doc, f"mask_audit_{a.tag or Path(a.manifest).parent.name}", md, summary)
     print(md)

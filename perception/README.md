@@ -5,13 +5,18 @@ Drone-side perception. Imports only `contracts`, numpy and scipy (hard rule 1); 
 | Module | What |
 |---|---|
 | `detectors/threshold.py` | `ThresholdDetector`: classical, recall-first blob proposals (absolute temperature OR local contrast) |
-| `detectors/fused.py` | `FusedDetector`: the mixed approach (proposals → verifier → detections, hot-bypass ≥ 300 °C) |
+| `detectors/fused.py` | `FusedDetector`: the mixed approach (proposals → verifier → detections) + `HotBypassRule` (decision 0003) |
 | `detectors/classifiers.py` | `OnnxCnnClassifier` (**primary**), `OnnxGbmClassifier` (**stretch**), `ConstantClassifier` (stub), `load_classifier()` |
 | `detectors/fake.py` | `FakeDetector`: sim ground truth with misses, decoy hits and clutter (deterministic). **Use this from day one** |
 | `georef.py` | pixel ↔ world (flat ground or DEM ray-march), frame footprint |
 | `tracking.py` | `HotspotTracker`: detections over frames → `Hotspot` entities |
 | `mapping.py` | `LogOddsMap`: NumPy log-odds layers → `GridCellUpdate` deltas for `MapSync` |
-| `pipeline.py` | `SeekerPerception`: one call per frame, all of the above |
+| `pipeline.py` | `SeekerPerception`: one call per frame, all of the above, with sensor context |
+| `frame_context.py` | `FrameContext` (altimeter, RTK/thermal health, FFC, gain saturation, friendly drones) + `PoseBuffer` (pose at exposure time) |
+| `terrain.py` / `distortion.py` | `DemSampler` (terrain height) / `LensDistortion` (Brown–Conrady) |
+| `confirm.py` | close range: `HotspotConfirmer` (INVESTIGATE) and `SuppressionChecker` (VERIFY after a drop) |
+| `evaluate_confirm.py` | synthetic hover-sequence evaluation of the confirm stage |
+| `radiometry.py` | Planck temperature ↔ radiance (used whenever resolution changes) |
 | `patches.py` / `features.py` | preprocessing shared with training (versioned) |
 | `evaluation.py` / `evaluate.py` | metrics (F1, recall-first threshold, object matching, CIs) and the test-split evaluator |
 | `synth.py` | synthetic radiometric night frames with exact masks (sub-pixel dilution, decoys) |
@@ -28,9 +33,23 @@ det = FakeDetector(lambda now: [TruthSource("F1", fire_pos, area_m2=2.0, temp_c=
 # later: the real mixed detector
 det = FusedDetector(load_classifier("perception/models/fire_cnn.onnx"))
 
-perc = SeekerPerception(drone_id="seeker-1", detector=det, grid=scenario.grid)
-changed_hotspots = perc.process(thermal_frame)   # -> publish each as HotspotReport
-cells = perc.map.pop_updates()                   # -> MapSync.cells
+perc = SeekerPerception(drone_id="seeker-1", detector=det, grid=scenario.grid,
+                        dem=dem_sampler, pose_buffer=pose_buffer)        # both optional
+pose_buffer.add(t, autopilot_pose)                                      # every autopilot tick (50-200 Hz)
+ctx = FrameContext(agl_m=altimeter_m, gnss_rtk_ok=state.sensors_ok.get("gnss_rtk", True),
+                   ffc_active=camera.ffc_in_progress, friendly_positions=other_drone_positions)
+changed_hotspots = perc.process(thermal_frame, ctx)  # -> publish each as HotspotReport
+cells = perc.map.pop_updates()                       # -> MapSync.cells
+
+# INVESTIGATE task (seeker hovering at ~30 m over a candidate hotspot)
+conf = HotspotConfirmer(load_classifier("perception/models/fire_cnn.onnx"))
+conf.add_frame(frame, hotspot.position, gsd_m)       # each frame; then
+result = conf.result()                               # CONFIRMED / FALSE_POSITIVE / None (keep looking)
+# VERIFY task after a drop (seeker or extinguisher camera)
+chk = SuppressionChecker(); chk.add_frame(frame, hotspot.position, gsd_m); chk.result()  # SUPPRESSED or None
 ```
 
-Training and data: see `training/README.md` and `training/DATA_SOURCES.md`.
+Design decisions with demo talking points: `docs/decisions/` (0001 altitude vs lidar, 0002 sensor wiring and lens
+distortion, 0003 hot-blob bypass, 0004 close-range confirmation).
+
+Training and data: `exclude/training_README.md` and `exclude/DATA_SOURCES.md` (local only: `exclude/` is gitignored).

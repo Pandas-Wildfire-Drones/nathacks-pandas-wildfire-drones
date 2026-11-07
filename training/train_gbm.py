@@ -62,6 +62,7 @@ def main() -> None:
     ap.add_argument("--results-doc", default=str(REPO / "perception" / "RESULTS.md"))
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--min-recall", type=float, default=0.95)
+    ap.add_argument("--min-precision", type=float, default=0.98)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     out = Path(args.out_dir)
@@ -81,7 +82,7 @@ def main() -> None:
         m = fit_balanced(make_model(args.seed + k), X[tr], ps.y[tr])
         oof[va] = m.predict_proba(X[va])[:, 1]
         print(f"[gbm fold {k}] done")
-    cv = evaluate_oof(ps.y, oof, folds, args.min_recall)
+    cv = evaluate_oof(ps.y, oof, folds, args.min_recall, args.min_precision)
     final = fit_balanced(make_model(args.seed + 100), X, ps.y)
     onnx_path = out / "fire_gbm.onnx"
     export_onnx(final, onnx_path)
@@ -95,7 +96,9 @@ def main() -> None:
 
     meta = {"model_kind": "gbm", "stretch_goal": True, "patch_spec": PATCH_SPEC.to_dict(),
             "feature_version": FEATURE_VERSION, "feature_names": list(FEATURE_NAMES), "input_name": "features",
-            "threshold": cv["final_threshold"]["threshold"],
+            "scale_normalized": ps.scale_normalized,
+            "threshold": cv["final_threshold"]["threshold"], "confirm_threshold": cv["confirm_threshold"]["threshold"],
+            "reject_threshold": cv["reject_threshold"]["threshold"],
             "threshold_rule": f"recall>={args.min_recall} then max precision (pooled OOF)",
             "cv_summary": cv["summary"], "onnx_parity_max_abs": parity, "tag": tag,
             "created": dt.datetime.now().isoformat(timespec="seconds")}

@@ -21,7 +21,7 @@ import numpy as np
 from scipy import ndimage
 
 __all__ = [
-    "binary_metrics", "metrics_from_counts", "choose_threshold_recall_first", "average_precision", "roc_auc",
+    "binary_metrics", "metrics_from_counts", "choose_threshold_recall_first", "choose_threshold_precision_first", "average_precision", "roc_auc",
     "GtObject", "gt_objects_from_mask", "match_detections", "blob_label", "bootstrap_ci", "summarize_folds",
 ]
 
@@ -72,6 +72,34 @@ def choose_threshold_recall_first(y_true, scores, min_recall: float = 0.95) -> d
     p, r = float(precision[best]), float(recall[best])
     return {"threshold": float(thr[best]), "precision": p, "recall": r,
             "f1": 2 * p * r / (p + r) if p + r else 0.0, "met_target": met, "min_recall": min_recall}
+
+
+def _pr_curve(y_true, scores):
+    y = np.asarray(y_true).astype(bool)
+    s = np.asarray(scores, dtype=np.float64)
+    order = np.argsort(-s, kind="stable")
+    s_sorted, y_sorted = s[order], y[order]
+    tps, fps = np.cumsum(y_sorted), np.cumsum(~y_sorted)
+    last = np.r_[np.nonzero(np.diff(s_sorted))[0], len(s_sorted) - 1]
+    thr, tp, fp = s_sorted[last], tps[last], fps[last]
+    return thr, tp / max(int(y.sum()), 1), tp / np.maximum(tp + fp, 1)
+
+
+def choose_threshold_precision_first(y_true, scores, min_precision: float = 0.98) -> dict:
+    """CONFIRM operating point: highest-recall threshold whose precision >= min_precision (ties -> higher threshold).
+    Falls back to the highest-precision threshold (flagged) if the target is unreachable."""
+    if np.asarray(y_true).astype(bool).sum() == 0:
+        raise ValueError("no positives: cannot choose a precision-first threshold")
+    thr, recall, precision = _pr_curve(y_true, scores)
+    ok = precision >= min_precision - 1e-12
+    if ok.any():
+        idx = np.nonzero(ok)[0]
+        best, met = idx[np.lexsort((-thr[idx], -recall[idx]))[0]], True
+    else:
+        best, met = int(np.argmax(precision)), False
+    p, r = float(precision[best]), float(recall[best])
+    return {"threshold": float(thr[best]), "precision": p, "recall": r,
+            "f1": 2 * p * r / (p + r) if p + r else 0.0, "met_target": met, "min_precision": min_precision}
 
 
 def average_precision(y_true, scores) -> float:

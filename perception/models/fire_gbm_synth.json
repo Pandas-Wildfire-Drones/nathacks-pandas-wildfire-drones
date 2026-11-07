@@ -2,15 +2,16 @@
   "model_kind": "gbm",
   "stretch_goal": true,
   "patch_spec": {
-    "version": "1",
+    "version": "2",
     "size_px": 32,
+    "ground_size_m": 2.3,
     "abs_min_c": -20.0,
     "abs_max_c": 600.0,
     "contrast_scale_c": 50.0,
     "border_px": 3,
     "channels": 2
   },
-  "feature_version": "1",
+  "feature_version": "2",
   "feature_names": [
     "peak_c",
     "mean_c",
@@ -27,46 +28,49 @@
     "grad_max"
   ],
   "input_name": "features",
-  "threshold": 0.9849051237106323,
+  "scale_normalized": true,
+  "threshold": 0.9847950339317322,
+  "confirm_threshold": 0.9847950339317322,
+  "reject_threshold": 0.023340439423918724,
   "threshold_rule": "recall>=0.95 then max precision (pooled OOF)",
   "cv_summary": {
     "precision": {
-      "mean": 0.9937263551721764,
-      "std": 0.004249116331286542,
+      "mean": 0.9939675249529871,
+      "std": 0.0053216675046431645,
       "n": 5
     },
     "recall": {
-      "mean": 0.9564047037965542,
-      "std": 0.026299794070277233,
+      "mean": 0.9430835706815024,
+      "std": 0.05236438523476895,
       "n": 5
     },
     "f1": {
-      "mean": 0.9745020756613776,
-      "std": 0.013189564852757444,
+      "mean": 0.9670027384706013,
+      "std": 0.027608884803969,
       "n": 5
     },
     "f2": {
-      "mean": 0.9635154808954306,
-      "std": 0.021130873857036922,
+      "mean": 0.9523304183435674,
+      "std": 0.04299180317714015,
       "n": 5
     },
     "accuracy": {
-      "mean": 0.9686109486925936,
-      "std": 0.015295062659384094,
+      "mean": 0.9607717287505884,
+      "std": 0.030520580362814836,
       "n": 5
     },
     "ap": {
-      "mean": 0.9975001638341249,
-      "std": 0.002400293601662538,
+      "mean": 0.9981722690054647,
+      "std": 0.001662370485679756,
       "n": 5
     },
     "roc_auc": {
-      "mean": 0.9949111413684462,
-      "std": 0.005016620134894289,
+      "mean": 0.996434775413926,
+      "std": 0.0032187651388780212,
       "n": 5
     }
   },
-  "onnx_parity_max_abs": 8.097164516662758e-08,
+  "onnx_parity_max_abs": 7.634569465508889e-08,
   "tag": "synth",
-  "created": "2026-11-07T14:56:50"
+  "created": "2026-11-07T16:29:42"
 }

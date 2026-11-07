@@ -10,7 +10,8 @@ from __future__ import annotations
 import numpy as np
 
 from perception.evaluation import (
-    average_precision, binary_metrics, choose_threshold_recall_first, roc_auc, summarize_folds,
+    average_precision, binary_metrics, choose_threshold_precision_first, choose_threshold_recall_first, roc_auc,
+    summarize_folds,
 )
 
 __all__ = ["make_folds", "evaluate_oof"]
@@ -32,7 +33,8 @@ def make_folds(y: np.ndarray, groups: np.ndarray, n_splits: int = 5, seed: int =
     return list(skf.split(np.zeros(len(y)), y, groups))
 
 
-def evaluate_oof(y: np.ndarray, oof: np.ndarray, folds, min_recall: float = 0.95) -> dict:
+def evaluate_oof(y: np.ndarray, oof: np.ndarray, folds, min_recall: float = 0.95, min_precision: float = 0.98,
+                 reject_recall: float = 0.99) -> dict:
     y = np.asarray(y).astype(int)
     per_fold = []
     for k, (_, va) in enumerate(folds):
@@ -48,5 +50,18 @@ def evaluate_oof(y: np.ndarray, oof: np.ndarray, folds, min_recall: float = 0.95
     pooled = binary_metrics(y, oof >= final["threshold"])
     pooled.update(ap=average_precision(y, oof), roc_auc=roc_auc(y, oof))
     at_half = binary_metrics(y, oof >= 0.5)
-    return {"per_fold": per_fold, "summary": summarize_folds(per_fold), "final_threshold": final,
-            "pooled_oof_at_final_threshold": pooled, "pooled_oof_at_0.5": at_half, "min_recall": min_recall}
+    # CONFIRM operating point (close-range INVESTIGATE, docs/decisions/0004). Chosen on single-patch OOF scores, so
+    # it is conservative for the multi-frame average the confirmer actually thresholds.
+    # Confirming must never be a LOWER bar than searching: on easy data "max recall at precision >= target" can pick a
+    # threshold below the search one, which would invert the stages. Raise it to the search threshold if so.
+    confirm = choose_threshold_precision_first(y, oof, min_precision)
+    if confirm["threshold"] < final["threshold"]:
+        confirm = {**confirm, "threshold": final["threshold"], "raised_to_search_threshold": True}
+    confirm_m = binary_metrics(y, oof >= confirm["threshold"])
+    # REJECT operating point (close range): only call a candidate FALSE_POSITIVE below a threshold that still keeps
+    # recall >= reject_recall. Between reject and confirm the confirmer says "inconclusive -> escalate to a human".
+    reject = choose_threshold_recall_first(y, oof, reject_recall)
+    reject = {**reject, "threshold": min(reject["threshold"], final["threshold"])}
+    return {"reject_threshold": reject,"per_fold": per_fold, "summary": summarize_folds(per_fold), "final_threshold": final,
+            "pooled_oof_at_final_threshold": pooled, "pooled_oof_at_0.5": at_half, "min_recall": min_recall,
+            "confirm_threshold": confirm, "pooled_oof_at_confirm_threshold": confirm_m}

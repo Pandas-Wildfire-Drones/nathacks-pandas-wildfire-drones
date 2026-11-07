@@ -67,11 +67,13 @@ class LogOddsMap:
         rows = g.origin.y + (np.arange(r0, r1) + 0.5) * g.resolution_m
         return np.meshgrid(cols, rows)  # (xs, ys) with shape (r1-r0, c1-c0)
 
-    def update(self, footprint: list[Position] | None, hits: list[tuple[Position, float]], now: float) -> None:
-        """footprint: ground polygon of the frame (perception.georef.footprint_corners). hits: (position, confidence)."""
+    def update(self, footprint: list[Position] | None, hits: list[tuple[Position, float]], now: float,
+               hit_radius_m: float | None = None) -> None:
+        """footprint: ground polygon of the frame (perception.georef.footprint_corners). hits: (position, confidence).
+        hit_radius_m overrides the default (wider when GNSS-RTK is lost, so evidence lands on the right cells)."""
         hit_mask_global: dict[tuple[int, int, int, int], np.ndarray] = {}
+        rr = self.hit_radius_m if hit_radius_m is None else hit_radius_m
         for pos, conf in hits:
-            rr = self.hit_radius_m
             win = self._cell_window(pos.x - rr, pos.x + rr, pos.y - rr, pos.y + rr)
             r0, r1, c0, c1 = win
             if r1 <= r0 or c1 <= c0:

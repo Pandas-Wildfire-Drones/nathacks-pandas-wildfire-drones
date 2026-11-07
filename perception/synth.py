@@ -27,17 +27,7 @@ from scipy import ndimage
 __all__ = ["SynthObject", "SynthParams", "planck_radiance", "radiance_to_temp", "synth_frame", "random_objects",
            "generate_dataset"]
 
-_C1, _C2 = 1.191042e-16, 1.4387769e-2  # 2hc^2 [W m^2 / sr], hc/k [m K]
-_LAMBDA = 10e-6
-
-
-def planck_radiance(temp_c: np.ndarray | float, lam: float = _LAMBDA):
-    t = np.asarray(temp_c, dtype=np.float64) + 273.15
-    return _C1 / (lam ** 5 * (np.exp(_C2 / (lam * t)) - 1.0))
-
-
-def radiance_to_temp(radiance: np.ndarray, lam: float = _LAMBDA) -> np.ndarray:
-    return _C2 / (lam * np.log1p(_C1 / (lam ** 5 * np.maximum(radiance, 1e-30)))) - 273.15
+from .radiometry import planck_radiance, radiance_to_temp  # noqa: E402  (re-exported for callers)
 
 
 @dataclass(frozen=True)
@@ -159,9 +149,10 @@ def random_objects(rng: np.random.Generator, p: SynthParams, fire_prob: float = 
 
 
 def generate_dataset(out_dir: str | Path, flights: int = 12, frames_per_flight: int = 40, seed: int = 0,
-                     size_px: int = 256) -> Path:
+                     size_px: int = 256, agl_range_m: tuple[float, float] = (25.0, 150.0)) -> Path:
     """Writes frames/*.npy, masks/*.npy and manifest.csv. Each 'flight' has its own altitude and ambient,
-    so group-wise splits behave like real flights. Altitude 60-150 m with the 640 px / 32 deg seeker camera."""
+    so group-wise splits behave like real flights. Altitude spans close-range confirmation (25-40 m) up to
+    high search (150 m) with the 640 px / 32 deg seeker camera, so one scale-normalized model covers both."""
     from .datasets import FrameRecord, write_manifest
 
     out = Path(out_dir)
@@ -170,7 +161,7 @@ def generate_dataset(out_dir: str | Path, flights: int = 12, frames_per_flight: 
     rng = np.random.default_rng(seed)
     recs = []
     for f in range(flights):
-        agl = float(rng.uniform(60, 150))
+        agl = float(rng.uniform(*agl_range_m))
         gsd = 2 * agl * math.tan(math.radians(16)) / 640
         p = SynthParams(height_px=size_px, width_px=size_px, gsd_m=gsd, ambient_c=float(rng.uniform(-2, 16)),
                         terrain_sigma_c=float(rng.uniform(0.5, 3.0)))
@@ -193,8 +184,9 @@ def _main() -> None:
     ap.add_argument("--frames-per-flight", type=int, default=40)
     ap.add_argument("--size-px", type=int, default=256)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--agl-range", type=float, nargs=2, default=(25.0, 150.0), metavar=("MIN_M", "MAX_M"))
     a = ap.parse_args()
-    print(generate_dataset(a.out, a.flights, a.frames_per_flight, a.seed, a.size_px))
+    print(generate_dataset(a.out, a.flights, a.frames_per_flight, a.seed, a.size_px, tuple(a.agl_range)))
 
 
 if __name__ == "__main__":

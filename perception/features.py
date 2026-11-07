@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from .patches import PATCH_SPEC, PatchSpec, extract_patch
+from .patches import PATCH_SPEC, PatchSpec, extract_patch_scaled
 
 __all__ = ["FEATURE_VERSION", "FEATURE_NAMES", "patch_features", "features_at"]
 
-FEATURE_VERSION = "1"
+FEATURE_VERSION = "2"  # v2: features computed on scale-normalized patches (PatchSpec v2)
 FEATURE_NAMES = (
     "peak_c", "mean_c", "std_c", "p90_c", "background_c", "peak_minus_bg", "mean_minus_bg",
     "hot5_frac", "hot10_frac", "hot50_frac", "center_minus_ring", "grad_mean", "grad_max",
@@ -44,7 +44,8 @@ def patch_features(patches_c: np.ndarray, spec: PatchSpec = PATCH_SPEC) -> np.nd
     return feats.astype(np.float32)
 
 
-def features_at(temp_c: np.ndarray, centers_uv: list[tuple[float, float]], spec: PatchSpec = PATCH_SPEC) -> np.ndarray:
+def features_at(temp_c: np.ndarray, centers_uv: list[tuple[float, float]], spec: PatchSpec = PATCH_SPEC,
+                gsd_m: float | None = None) -> np.ndarray:
     if not centers_uv:
         return np.zeros((0, len(FEATURE_NAMES)), dtype=np.float32)
-    return patch_features(np.stack([extract_patch(temp_c, u, v, spec.size_px) for u, v in centers_uv]), spec)
+    return patch_features(np.stack([extract_patch_scaled(temp_c, u, v, gsd_m, spec) for u, v in centers_uv]), spec)

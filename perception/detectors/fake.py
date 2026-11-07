@@ -22,6 +22,7 @@ import numpy as np
 
 from contracts import Detection, DetectorKind, Position, ThermalFrame
 
+from ..distortion import LensDistortion
 from ..georef import world_to_pixel
 
 __all__ = ["TruthSource", "FakeDetector"]
@@ -41,8 +42,9 @@ class FakeDetector:
 
     def __init__(self, truth: Callable[[float], list[TruthSource]], seed: int = 0, pd_max: float = 0.95,
                  area_px_50: float = 2.0, min_temp_c: float = 60.0, p_decoy: float = 0.3,
-                 clutter_rate: float = 0.02, pos_noise_px: float = 0.7):
+                 clutter_rate: float = 0.02, pos_noise_px: float = 0.7, distortion: LensDistortion | None = None):
         self.truth = truth
+        self.distortion = distortion  # sim-only: emulate a real lens so georef calibration matters (decision 0002)
         self.rng = np.random.default_rng(seed)
         self.pd_max, self.area_px_50, self.min_temp_c = pd_max, area_px_50, min_temp_c
         self.p_decoy, self.clutter_rate, self.pos_noise_px = p_decoy, clutter_rate, pos_noise_px
@@ -55,7 +57,7 @@ class FakeDetector:
     def detect(self, frame: ThermalFrame) -> list[Detection]:
         cam, out, ids = frame.camera, [], []
         for src in self.truth(frame.timestamp):
-            uv = world_to_pixel(src.position, frame.pose, cam)
+            uv = world_to_pixel(src.position, frame.pose, cam, self.distortion)
             if uv is None:
                 continue
             area_px = src.area_m2 / self._gsd(frame, src.position.z) ** 2

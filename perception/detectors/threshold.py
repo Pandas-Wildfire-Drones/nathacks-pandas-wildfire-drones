@@ -77,8 +77,8 @@ def find_blobs(temp_c: np.ndarray, params: ThresholdParams = ThresholdParams()) 
         t = temp[sl][m]
         wts = np.maximum(excess[sl][m], 1e-3)
         rows, cols = np.nonzero(m)
-        v = float((rows * wts).sum() / wts.sum()) + sl[0].start
-        u = float((cols * wts).sum() / wts.sum()) + sl[1].start
+        v = float((rows * wts).sum() / wts.sum()) + sl[0].start + 0.5  # +0.5: pixel-centre convention (georef.py)
+        u = float((cols * wts).sum() / wts.sum()) + sl[1].start + 0.5
         blobs.append(Blob(
             u=u, v=v, area_px=area, peak_temp_c=float(t.max()), mean_temp_c=float(t.mean()),
             background_c=float(np.median(bg[sl][m])),

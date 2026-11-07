@@ -7,12 +7,17 @@ so the swarm core and the simulator can import perception without installing ML 
 Pipeline (mixed algorithmic + ML, DetectorKind.FUSED):
 
     ThermalFrame --ThresholdDetector--> candidate blobs (recall-first, classical)
-                 --PatchClassifier-->   p(fire) per blob (CNN in ONNX; GBM = STRETCH)
+                 --PatchClassifier-->   p(fire) per blob (CNN in ONNX; GBM = STRETCH), scale-normalized by GSD
                  --FusedDetector-->     Detection list (image coords)
                  --Georeferencer-->     world Position per detection
                  --HotspotTracker-->    Hotspot entities (fused over frames)
                  --LogOddsMap-->        GridCellUpdate deltas for MapSync
-"""
-from .patches import PATCH_SPEC, PatchSpec, extract_patch, extract_patches, normalize_patch, normalize_patches
 
-__all__ = ["PATCH_SPEC", "PatchSpec", "extract_patch", "extract_patches", "normalize_patch", "normalize_patches"]
+    Close range (INVESTIGATE / VERIFY tasks): perception/confirm.py, same CNN, separate thresholds, multi-frame.
+"""
+from .patches import (
+    PATCH_SPEC, PatchSpec, extract_patch, extract_patch_scaled, extract_patches, normalize_patch, normalize_patches,
+)
+
+__all__ = ["PATCH_SPEC", "PatchSpec", "extract_patch", "extract_patch_scaled", "extract_patches", "normalize_patch",
+           "normalize_patches"]
