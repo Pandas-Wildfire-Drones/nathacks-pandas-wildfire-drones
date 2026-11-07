@@ -13,6 +13,13 @@ Grouping (matters a lot, context.md section 10):
   --group-by sequence  sort by filename (time order) and cut into blocks of --block consecutive frames.
                        Use for the single-burn Kaggle subset: neighbouring frames stay in the same group.
 Labels: from the nearest folder name ("No Fire"/"NoFire"/"no_fire" -> 0, "Fire" -> 1), or from masks if given.
+  FLAME 3's Fire/No-Fire labels are a max-temperature heuristic (<~80 C no fire, >~200 C fire) plus manual review
+  of the band in between; any pixel masks should be assumed threshold-derived. See training/FLAME3.md.
+
+Dataset citation (requested by the FLAME 3 authors; also in training/FLAME3.md):
+  Hopkins, B., ONeill, L., Marinaccio, M., Rowell, E., Parsons, R., Flanary, S., Nazim I, Seielstad C, Afghah, F.
+  (2024). FLAME 3 Dataset: Unleashing the Power of Radiometric Thermal UAV Imagery for Wildfire Management.
+  arXiv preprint arXiv:2412.02831.
 """
 from __future__ import annotations
 
