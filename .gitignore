@@ -8,3 +8,8 @@ __pycache__/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
