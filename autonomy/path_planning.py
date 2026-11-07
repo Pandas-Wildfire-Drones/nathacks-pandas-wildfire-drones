@@ -1,84 +1,130 @@
-"""A* pathfinding algorithm for 2D occupancy grids.S"""
+"""A* pathfinding using the team's shared grid and geometry contracts."""
 
-from heapq import heappush, heappop
+from heapq import heappop, heappush
+from itertools import count
 from math import sqrt
 
-
-def heuristic(a, b):
-    """Octile distance: an admissible heuristic for 8-way movement."""
-    dx = abs(a[0] - b[0])
-    dy = abs(a[1] - b[1])
-    return max(dx, dy) + (sqrt(2) - 1) * min(dx, dy)
+from contracts.geometry import GridIndex, GridSpec, Position
 
 
-def get_neighbors(position, grid):
-    x, y = position
-    height = len(grid)
-    width = len(grid[0])
+def _heuristic(a: GridIndex, b: GridIndex) -> float:
+    """Octile distance for movement in eight directions."""
+    row_diff = abs(a.row - b.row)
+    col_diff = abs(a.col - b.col)
+    diagonal = min(row_diff, col_diff)
+    straight = max(row_diff, col_diff) - diagonal
+    return straight + diagonal * sqrt(2)
+
+
+def _get_neighbors(
+    current: GridIndex,
+    occupancy_grid: list[list[int]],
+    grid_spec: GridSpec,
+) -> list[GridIndex]:
+    """Return free neighboring cells without cutting obstacle corners."""
     neighbors = []
 
-    for dx, dy in [
+    for row_step, col_step in (
         (-1, 0), (1, 0), (0, -1), (0, 1),
         (-1, -1), (-1, 1), (1, -1), (1, 1),
-    ]:
-        nx, ny = x + dx, y + dy
+    ):
+        row = current.row + row_step
+        col = current.col + col_step
 
-        if not (0 <= nx < width and 0 <= ny < height):
-            continue
-        if grid[ny][nx] != 0:
+        if not (0 <= row < grid_spec.rows and 0 <= col < grid_spec.cols):
             continue
 
-        # Prevent cutting diagonally through obstacle corners.
-        if dx != 0 and dy != 0:
-            if grid[y][nx] != 0 or grid[ny][x] != 0:
+        if occupancy_grid[row][col] != 0:
+            continue
+
+        # A diagonal move is allowed only if both adjacent
+        # orthogonal cells are free.
+        if row_step != 0 and col_step != 0:
+            if occupancy_grid[current.row][col] != 0:
+                continue
+            if occupancy_grid[row][current.col] != 0:
                 continue
 
-        neighbors.append((nx, ny))
+        neighbors.append(GridIndex(row=row, col=col))
 
     return neighbors
 
 
-def find_path(grid, start, goal):
+def find_path(
+    occupancy_grid: list[list[int]],
+    grid_spec: GridSpec,
+    start: Position,
+    goal: Position,
+) -> list[Position] | None:
     """
-    A* pathfinding on a 2D occupancy grid.
-    0 = free cell; 1 = blocked cell.
-    Coordinates are grid indices (x, y), not metres.
-    Returns a list of cells, or None if no route exists.
+    Find a shortest route through a 2D occupancy grid using A*.
+
+    Occupancy convention:
+        0 = free cell
+        non-zero = blocked cell
+
+    Inputs:
+        occupancy_grid: rows indexed as [row][col]
+        grid_spec: shared physical grid definition
+        start: starting world-coordinate Position
+        goal: destination world-coordinate Position
+
+    Returns:
+        A list of world-coordinate Positions, including start and goal,
+        or None if no route exists.
+
+    Note:
+        Returned positions are at cell centers and use the grid origin's z.
     """
-    if not grid or not grid[0]:
-        raise ValueError("Grid cannot be empty")
+    if len(occupancy_grid) != grid_spec.rows:
+        raise ValueError("Occupancy grid row count does not match GridSpec")
 
-    width = len(grid[0])
-    height = len(grid)
+    if any(len(row) != grid_spec.cols for row in occupancy_grid):
+        raise ValueError("Occupancy grid column count does not match GridSpec")
 
-    if any(len(row) != width for row in grid):
-        raise ValueError("Grid rows must have equal lengths")
+    start_cell = grid_spec.world_to_cell(start)
+    goal_cell = grid_spec.world_to_cell(goal)
 
-    for name, (x, y) in [("start", start), ("goal", goal)]:
-        if not (0 <= x < width and 0 <= y < height):
-            raise ValueError(f"{name} is outside the grid")
-        if grid[y][x] != 0:
-            raise ValueError(f"{name} is blocked")
+    if start_cell is None:
+        raise ValueError("Start position is outside the grid")
+
+    if goal_cell is None:
+        raise ValueError("Goal position is outside the grid")
+
+    if occupancy_grid[start_cell.row][start_cell.col] != 0:
+        raise ValueError("Start position is in a blocked cell")
+
+    if occupancy_grid[goal_cell.row][goal_cell.col] != 0:
+        raise ValueError("Goal position is in a blocked cell")
 
     frontier = []
-    heappush(frontier, (heuristic(start, goal), start))
+    tie_breaker = count()
+
+    heappush(
+        frontier,
+        (_heuristic(start_cell, goal_cell), next(tie_breaker), start_cell),
+    )
+
     came_from = {}
-    costs = {start: 0}
+    costs = {start_cell: 0.0}
 
     while frontier:
-        _, current = heappop(frontier)
+        _, _, current = heappop(frontier)
 
-        if current == goal:
+        if current == goal_cell:
             path = [current]
+
             while current in came_from:
                 current = came_from[current]
                 path.append(current)
-            return path[::-1]
 
-        for neighbor in get_neighbors(current, grid):
+            path.reverse()
+            return [grid_spec.cell_to_world(cell) for cell in path]
+
+        for neighbor in _get_neighbors(current, occupancy_grid, grid_spec):
             diagonal = (
-                neighbor[0] != current[0]
-                and neighbor[1] != current[1]
+                neighbor.row != current.row
+                and neighbor.col != current.col
             )
             step_cost = sqrt(2) if diagonal else 1.0
             new_cost = costs[current] + step_cost
@@ -86,7 +132,12 @@ def find_path(grid, start, goal):
             if new_cost < costs.get(neighbor, float("inf")):
                 costs[neighbor] = new_cost
                 came_from[neighbor] = current
-                priority = new_cost + heuristic(neighbor, goal)
-                heappush(frontier, (priority, neighbor))
 
-    return None             
+                priority = new_cost + _heuristic(neighbor, goal_cell)
+
+                heappush(
+                    frontier,
+                    (priority, next(tie_breaker), neighbor),
+                )
+
+    return None
