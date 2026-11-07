@@ -1,0 +1,44 @@
+name: tests
+
+# Runs the full pytest suite (contracts + perception + anything else under tests/) on main and on PRs into main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # [perception] adds numpy/scipy/onnxruntime for the perception tests. pip only warns when an extra
+      # is not defined yet, so this also works on commits that predate the perception workstream.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,perception]"
+
+      - name: Run tests
+        run: python -m pytest -q
