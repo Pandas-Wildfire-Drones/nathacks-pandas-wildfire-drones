@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3` · `contract_version: 0.2.0` · last updated 2026-11-07
+`context_version: 0.3.1` · `contract_version: 0.2.0` · last updated 2026-11-07
 
 ---
 
@@ -70,14 +70,15 @@ Rule of thumb: nobody waits on anybody — `FakeDetector`, `SimAutopilot`, `SimB
 contracts/    shared Pydantic models, topics, interfaces, config   (this doc §11)
 core/         pure-Python swarm logic: leader, allocation, planning, map   (no ROS/web imports)
 perception/   detectors, georeferencing, mapping/tracking, evaluation; models/ (shipped .onnx), RESULTS.md
-training/     offline training (CNN primary, GBM stretch), dataset adapters, DATA_SOURCES.md
-exclude/      GITIGNORED: raw datasets, Colab scratch, training runs
+training/     offline training (CNN primary, GBM stretch), dataset adapters, FLAME3.md (citation + how labels are made)
+exclude/      GITIGNORED: raw datasets, Colab scratch, training runs, DATA_SOURCES.md, training_README.md
 sim/          world, fire model, sensor/comms models, scenario runner, metrics
 groundbase/   FastAPI, health monitor, DB
 frontend/     React: ops console + cinematic sim view
 adapters/     (stretch) ros2, mqtt, px4
 scenarios/    YAML/JSON ScenarioConfig files
 tests/  tools/  context.md
+.github/workflows/tests.yml   CI: full pytest suite on push to main + PRs into main (Python 3.11, 3.12)
 ```
 
 ---
@@ -143,6 +144,7 @@ tests/  tools/  context.md
 | Debug/replay | Foxglove / Rerun, MCAP logs | optional | |
 | Real-world middleware | ROS 2 (Jazzy on Ubuntu 24.04 is the safe pick; Lyrical Luth is the newest LTS `[SOURCED S15]`), PX4 + MAVSDK | stretch | adapters only |
 | Tooling | `uv`, `ruff`, `pytest`, pre-commit; Docker/devcontainer for Linux-only parts | core | |
+| CI | GitHub Actions `.github/workflows/tests.yml` | core | push to `main` + PRs into `main`; Python 3.11/3.12; installs `.[dev,perception,train]` (torch CPU wheel) so **every** test runs, none skipped |
 
 ---
 
@@ -199,7 +201,7 @@ Script: `python tools/sizing.py` (all numbers below come from it).
 | 3D lidar (Livox Mid-360 class) | ✔ obstacle map + water surveys | ✔ **last-mile only** (descent, drop, intake) | 40 m range `[S8]` |
 | Flight controller | ✔ | ✔ | Pixhawk class |
 | RTK-GNSS | ✔ | ✔ | needs ground-base corrections |
-| Range/altitude sensor | laser rangefinder | **radar altimeter** (calm water returns weakly to lasers `[VERIFY]`) | terrain following, drop height |
+| Range/altitude sensor | **long-range laser altimeter, rated ≥ 100 m** `[VERIFY]` (decision 0001) | **radar altimeter** (calm water returns weakly to lasers `[VERIFY]`) | terrain following, drop height |
 | Companion computer | Jetson Orin NX class: detector + map `[S9]` | **smaller** (Orin Nano class): verify, navigation, bus | extinguisher doesn't run search |
 | Mesh radio | ✔ | ✔ | |
 | ADS-B in | recommended | **✔ required** (big and in the same airspace as manned water bombers) | `[ASSUMPTION]` |
@@ -329,15 +331,24 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
 - **Approach for those:** physics/classical methods; **anomaly detection against background** (background-only data is plentiful, positives are not); synthetic data from the sim with domain randomization; ML only where data exists (thermal blob classification/verification).
 - **Perception ML decisions (2026-11-07, workstream C):**
   - **Verifier = small CNN (PRIMARY)** on 32×32 °C patches (2 channels: absolute temperature, local contrast) centred on `ThresholdDetector` proposals, exported to **ONNX** (not pickle). **GBM on hand-made blob features = STRETCH**, same folds, kept only as a comparison. Preprocessing lives once in `perception/patches.py` (versioned).
-  - **Threshold rule: recall-first**, i.e. recall ≥ 0.95 on cross-validation, then max precision. Missing a spot fire costs more than a seeker INVESTIGATE pass. F1 is still reported against the >90% criterion; accuracy is shown but not trusted (class imbalance). `[ASSUMPTION]` 0.95 target; hot blobs ≥ 300 °C bypass the CNN veto.
+  - **Two operating points, one model** (decision 0004): SEARCH threshold is **recall-first** (recall ≥ 0.95 on CV, then max precision; a miss costs more than a seeker INVESTIGATE pass); CONFIRM threshold is **precision-first** (precision ≥ 0.98, then max recall; a confirmation can send an extinguisher). F1 is still reported against the >90% criterion; accuracy is shown but not trusted (class imbalance). `[ASSUMPTION]` 0.95 / 0.98 targets.
+  - **Scale-normalized patches (PatchSpec v2):** when the GSD is known, each patch is a fixed 2.3 m ground window resampled in radiance, so the same CNN works at 80 m search and 25–40 m confirm altitude. Datasets need altitude/GSD per frame (`gsd_m` manifest column).
+  - **Close range:** `perception/confirm.py` — `HotspotConfirmer` (INVESTIGATE: multi-frame mean probability vs the confirm threshold) and `SuppressionChecker` (VERIFY after a drop: physics, "anything still ≥ 15 °C above background?", reports SUPPRESSED only).
+  - **Hot-blob bypass** (decision 0003): ≥ 3 px at ≥ 0.9 × the current gain mode's saturation, or a blob larger than the patch window and ≥ 150 °C; no bypass near friendly drones or known industrial heat. Never skips confirmation.
+  - **Sensor wiring** (decision 0002, no contract change): pose interpolated at exposure time, DEM/altimeter for georef and GSD, wider gates when RTK is lost, frames skipped during FFC or thermal faults (no false "searched, empty" evidence), optional lens distortion.
   - **Evaluation:** group-wise train/test split (`training/make_split.py`); 5-fold StratifiedGroupKFold on train; per-fold thresholds chosen on the other folds; test split used once by `perception/evaluate.py`; patch, object and frame levels reported separately; bootstrap CI over groups. Results go to `perception/RESULTS.md` + `perception/results/*.json` (for the demo).
-  - `[VERIFY]` FLAME 3 masks may be **generated by thresholding** the Celsius TIFFs (arXiv 2609.01390), which is circular for a threshold+CNN pipeline: run `python -m training.check_masks` (finds a constant cutoff across frames) and hand-check the test-split masks. The Kaggle subset is **one burn**, so groups = time blocks. Data list: `training/DATA_SOURCES.md`; workflow: `training/README.md`.
+  - **FLAME 3 labels are threshold-derived** `[SOURCED S13 §III.A.1 p.5, §III.C.1]`:
+    - *Image-level Fire / No-Fire* comes from the frame's **max TIFF temperature**: < ~80 °C → no fire, > ~200 °C → fire. Frames in between are "manually reviewed or excluded". The authors call these thresholds "practical heuristics", tuned to their prescribed burns (typically 55–650 °C, §III.B).
+    - *Pixel masks:* the paper describes none. It only says TIFFs *enable* masks via direct, Otsu or hysteresis thresholding; S20 reports thresholded masks. Treat any mask as a threshold unless `python -m training.check_masks` says otherwise (it detects global and per-frame cutoffs).
+    - **Consequence:** a threshold + CNN pipeline scores optimistically against these labels. The hard 80–200 °C band (warm decoys, smouldering spots) is under-represented. Report F1 **per max-T band** (< 80 / 80–200 / > 200 °C), and don't cite overall FLAME 3 F1 as evidence for the > 90% criterion. Never copy 80/200 °C into `perception/` as constants.
+    - The Kaggle subset is **one burn**, so groups = time blocks.
+    - Citation (requested by the authors) and full notes: `training/FLAME3.md`. Data list: `exclude/DATA_SOURCES.md`; workflow: `exclude/training_README.md` (local, gitignored).
 
 ---
 
 ## 11. Contracts
 
-**Install/test:** `pip install -e .[dev]` (perception: `.[dev,perception]`, training: `.[dev,train]`) · `python -m pytest -q` (56 contract tests + 21 perception tests) · `python tools/sync_contracts.py` refreshes the code below.
+**Install/test:** `pip install -e .[dev]` (perception: `.[dev,perception]`, training: `.[dev,train]`) · `python -m pytest -q` (56 contract tests + 22 perception tests; the ONNX round-trip test needs `.[train]`, otherwise it is skipped) · `python tools/sync_contracts.py` refreshes the code below. CI (`.github/workflows/tests.yml`) runs the whole suite on every push to `main` and every PR into `main`: keep it green before merging.
 
 **How to use:** build messages with `SwarmMessage.create(sender_id, body, now, seq=…, receiver_id=…)`; publish on `topic_for(msg)`; serialize with `encode()`, parse with `decode()`; match subscriptions with `topic_matches()`; implement `Bus`/`Clock`/`Autopilot`/`PayloadSystem`/`Detector`/`Georeferencer` from `interfaces.py`.
 
@@ -1869,9 +1880,9 @@ def example_scenario() -> ScenarioConfig:
 6. `[OPEN]` **Intake method** for water bodies (bucket vs hose + pump vs onboard tank) and whether foam dosing is realistic with a bucket; engine-life limit on continuous hours.
 7. `[VERIFY]` Alberta/Canadian rules on drawing water from natural sources and on foam/retardant near waterways.
 8. `[VERIFY]` Export/availability limits on thermal cameras (frame rate, licensing) for any real hardware.
-10. `[OPEN]` **Seeker search altitude vs 40 m lidar:** see `docs/decisions/0001-seeker-search-altitude-vs-lidar-range.md` (recommended: keep 80 m, lidar = flight-level obstacle sensor, add a ≥100 m altimeter).
+10. ~~Seeker search altitude vs 40 m lidar~~ **Resolved 2026-11-07: Option A** (keep 80 m; lidar = flight-level obstacle sensor; add a ≥ 100 m altimeter). Alternatives C/D/E on file: `docs/decisions/0001-…`.
 11. `[VERIFY]` (E) **Thermal saturation:** `ThermalCameraSpec.saturation_temp_c = 550` but Boson+ low gain is listed up to ~350 °C (original Boson ~500 °C; high gain ~140–150 °C) [S23]. Smouldering peaks are 450–700 °C [S24], so fire cores may saturate. Pick the camera and gain mode, then set the value.
-9. `[OPEN]` **Perception targets:** confirm recall ≥ 0.95 as the operating point and the 300 °C hot-bypass (blobs that hot can't be vetoed by the CNN). Who hand-checks FLAME 3 test masks? Has someone emailed the FLAME 3 authors for the full 6-burn set?
+9. `[OPEN]` **Perception targets:** confirm recall ≥ 0.95 (search) and precision ≥ 0.98 (confirm) as operating points, and the hot-blob bypass parameters (decision 0003). FLAME 3 labels are threshold-derived (§10). Who hand-labels a small 80–200 °C test set so the hard band has independent labels? Has someone emailed the FLAME 3 authors for the full 6-burn set?
 
 ---
 
@@ -1879,6 +1890,8 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
+| 2026-11-07 | perception chat (C) | decisions 0001 (ACCEPTED A) – 0004 in `docs/decisions/`; PatchSpec v2 scale-normalized patches; confirm/verify stage (`perception/confirm.py`, `evaluate_confirm.py`); precision-first confirm threshold; hot-blob bypass rule replaces 300 °C; sensor wiring (`frame_context.py`, `terrain.py`, `distortion.py`); seeker altimeter in §6.3; no contract changes | user decisions on altitude, bypass, sensors, confirm stage |
 | 2026-11-07 | perception chat (C) | added `training/check_masks.py` (mask audit), decision doc 0001 (altitude vs lidar, PROPOSED), §12 items 10–11 (altimeter gap, Boson+ saturation 350 °C vs config 550 °C) | follow-up questions on masks, lidar, hot-bypass |
 | 2026-11-07 | perception chat (C) | v0.3: added `perception/` (threshold, FUSED CNN verifier, fake detector, georef, log-odds map, tracker, metrics, synthetic radiometric frames, pipeline evaluator) and `training/` (group CV, recall-first threshold, ONNX export; GBM = stretch), `exclude/` gitignored; §2/§3/§5/§10/§12 updated; no contract changes (77 tests) | perception workstream kickoff |
 | 2026-11-07 | follow-up chat | v0.2 / contracts 0.2.0: ultra-heavy hybrid extinguisher (800 kg MTOW, 170 L, 210 kg fuel), electric 10 kg seeker, trimmed extinguisher sensors, fuel/generator telemetry, refuel in refill, partial drops, sizing script; basin math redone with fuel (56 tests) | team decision: FireSwarm-style extinguisher, electric seekers |
@@ -1903,7 +1916,7 @@ def example_scenario() -> ScenarioConfig:
 - **S10** Class A foam & fire chemicals — https://www.fs.usda.gov/eng/pubs/pdf/92511209.pdf · https://www.fs.usda.gov/rm/fire/wfcs/documents/Overview%20of%20Use%20and%20Safety%20of%20Wildland%20Fire%20Chemical%20Products.pdf · https://www.perimeter-solutions.com/?p=181 · https://www.fireengineering.com/fire-safety/the-salem-tests/ · https://www.fireengineering.com/?p=264355
 - **S11** Waterway buffers / retardant toxicity — https://www.fs.usda.gov/t-d/programs/wfcs/retardants/current/gen/appguide.htm · https://www.nifc.gov/sites/default/files/redbook-files/Chapter12.pdf · https://www.hcn.org/?p=199704
 - **S12** Gas/smoke sensing — https://dryad.net/wildfiresensor · https://arxiv.org/pdf/2312.10919 · https://hellofuture.orange.com/en/a-drone-that-can-sniff-out-forest-fires-before-they-generate-visible-smoke · https://tech.eu/2023/08/11/ultra-early-detection-system/
-- **S13** FLAME 3 — https://arxiv.org/abs/2412.02831 · https://arxiv.org/html/2412.02831v1
+- **S13** FLAME 3 (Hopkins et al. 2024, arXiv:2412.02831; read v2, labeling in §III.A.1 p.5 and §III.C.1 p.9; cite as in `training/FLAME3.md`) — https://arxiv.org/abs/2412.02831 · https://arxiv.org/html/2412.02831v1
 - **S14** PX4 — https://docs.px4.io/main/en/dev_setup/dev_env · https://docs.px4.io/main/en/sim_gazebo_gz/multi_vehicle_simulation
 - **S15** ROS 2 Lyrical Luth — https://discourse.openrobotics.org/t/ros-2-lyrical-luth-released/55021
 - **S16** Water pickup / amphibious drones — https://www.popsci.com/technology/firefighting-drones-help-fight-wildfires/
