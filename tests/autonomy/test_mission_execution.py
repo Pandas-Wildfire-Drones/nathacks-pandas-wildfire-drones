@@ -331,3 +331,35 @@ def test_rejects_second_mission_while_one_is_active():
             make_hotspot(),
             another_task,
         )
+
+
+def test_health_failure_holds_drone():
+    from autonomy.health_manager import evaluate_drone_health
+    from contracts.enums import DroneStatus
+
+    drone = make_drone()
+
+    drone = drone.model_copy(
+        update={
+            "sensors_ok": {"thermal": False},
+            "status": DroneStatus.IDLE,
+        }
+    )
+
+    result = evaluate_drone_health(drone)
+
+    assert result.action == "HOLD"
+    assert not result.safe
+
+
+def test_health_failure_returns_on_bad_link():
+    from autonomy.health_manager import evaluate_drone_health
+
+    drone = make_drone().model_copy(
+        update={"link_quality": 0.05}
+    )
+
+    result = evaluate_drone_health(drone)
+
+    assert result.action == "RETURN"
+    assert not result.safe

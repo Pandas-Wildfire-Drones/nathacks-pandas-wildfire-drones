@@ -1,7 +1,8 @@
 """Coordinates planning, safety and execution for one drone."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from math import isfinite
 
 from contracts.entities import DroneState, Hotspot, Task, Zone
 from contracts.enums import (
@@ -35,7 +36,7 @@ class MissionExecutionResult:
 
 
 class DroneController:
-    """Coordinates planning and mission execution for an individual drone."""
+    """Coordinates planning, safety and mission execution for one drone."""
 
     def __init__(
         self,
@@ -51,7 +52,7 @@ class DroneController:
         self._terminal_result: MissionExecutionResult | None = None
 
     # ---------------------------------------------------------
-    # Existing planning functions
+    # Planning
     # ---------------------------------------------------------
 
     def plan_route(
@@ -62,7 +63,12 @@ class DroneController:
         goal: Position,
     ) -> list[Position] | None:
         """Return an A* route, or None if no route exists."""
-        return find_path(occupancy_grid, grid_spec, start, goal)
+        return find_path(
+            occupancy_grid,
+            grid_spec,
+            start,
+            goal,
+        )
 
     def plan_coverage(
         self,
@@ -72,7 +78,11 @@ class DroneController:
         z_m: float | None = None,
     ) -> list[Position]:
         """Generate search waypoints inside an assigned zone."""
-        return generate_coverage_waypoints(zone, spacing_m, z_m=z_m)
+        return generate_coverage_waypoints(
+            zone,
+            spacing_m,
+            z_m=z_m,
+        )
 
     def check_resources(
         self,
@@ -91,6 +101,44 @@ class DroneController:
             **resource_estimates,
         )
 
+    def evaluate_return_to_base(
+        self,
+        drone: DroneState,
+        outbound_distance_m: float,
+        return_distance_m: float,
+        cruise_speed_mps: float,
+        *,
+        battery_use_per_second: float = 0,
+        hover_seconds: float = 0,
+        hover_battery_use_per_second: float = 0,
+        required_drop_liters: float = 0,
+        reserve_fraction: float = 0.20,
+        fuel_use_kg_per_second: float = 0,
+        fuel_reserve_kg: float = 0,
+    ):
+        """
+        Assess whether the drone can complete the mission
+        while preserving its resource reserves.
+        """
+        assessment = self.check_resources(
+            drone,
+            outbound_distance_m,
+            return_distance_m,
+            cruise_speed_mps,
+            battery_use_per_second=battery_use_per_second,
+            hover_seconds=hover_seconds,
+            hover_battery_use_per_second=hover_battery_use_per_second,
+            required_drop_liters=required_drop_liters,
+            reserve_fraction=reserve_fraction,
+            fuel_use_kg_per_second=fuel_use_kg_per_second,
+            fuel_reserve_kg=fuel_reserve_kg,
+        )
+
+        if assessment.should_return and self.autopilot is not None:
+            self.autopilot.return_to_launch()
+
+        return assessment
+
     def check_path_conflicts(
         self,
         proposed_path,
@@ -103,6 +151,10 @@ class DroneController:
             other_paths,
             minimum_separation_m,
         )
+
+    # ---------------------------------------------------------
+    # Water-drop safety
+    # ---------------------------------------------------------
 
     def check_drop(
         self,
@@ -131,51 +183,72 @@ class DroneController:
         task: Task,
         cruise_speed_mps: float | None = None,
     ) -> MissionExecutionResult:
-        """Validate an assigned extinguishing task and request navigation."""
+        """
+        Start an extinguishing mission.
+
+        Validation failures that indicate an invalid command/assignment
+        raise ValueError. A valid mission transitions to TRANSIT.
+        """
 
         if self.autopilot is None or self.payload is None:
             raise RuntimeError(
                 "Mission execution requires an autopilot and payload"
             )
 
-        if self._active_task_id is not None and self._terminal_result is None:
-            raise RuntimeError("Another mission is already active")
+        if self._active_task_id is not None:
+            raise RuntimeError(
+                f"Mission task {self._active_task_id} is already active"
+            )
+
+        if self._terminal_result is not None:
+            raise RuntimeError("Previous mission has already completed")
 
         if drone.kind is not DroneKind.EXTINGUISHER:
-            raise ValueError("Only extinguisher drones can execute drop missions")
+            raise ValueError("Drone is not an extinguisher")
 
         if task.type is not TaskType.EXTINGUISH:
             raise ValueError("Task is not an extinguishing task")
 
-        if task.status not in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS):
-            raise ValueError("Task is not active")
+        if task.status not in (
+            TaskStatus.ASSIGNED,
+            TaskStatus.IN_PROGRESS,
+        ):
+            raise ValueError(
+                "Task is not assigned or in progress"
+            )
 
         if task.assigned_to != drone.drone_id:
-            raise ValueError("Task is assigned to another drone")
+            raise ValueError(
+                "Task is assigned to another drone"
+            )
 
         if task.epoch != drone.epoch:
-            raise ValueError("Task epoch does not match drone epoch")
+            raise ValueError(
+                "Task epoch does not match drone epoch"
+            )
 
         if task.target_hotspot_id != hotspot.hotspot_id:
-            raise ValueError("Task targets a different hotspot")
+            raise ValueError(
+                "Task does not target this hotspot"
+            )
 
         if (
             hotspot.assigned_to is not None
             and hotspot.assigned_to != drone.drone_id
         ):
-            raise ValueError("Hotspot is assigned to another drone")
+            raise ValueError(
+                "Hotspot is assigned to another drone"
+            )
 
         if hotspot.status not in (
             HotspotStatus.CONFIRMED,
             HotspotStatus.ASSIGNED,
         ):
-            raise ValueError("Hotspot has not been confirmed")
-
-        if self.payload.water_remaining_l() <= 0:
-            raise ValueError("Extinguisher has no water")
+            raise ValueError(
+                "Hotspot is not confirmed for extinguishing"
+            )
 
         self._active_task_id = task.task_id
-        self._terminal_result = None
 
         self.autopilot.goto(
             hotspot.position,
@@ -184,9 +257,9 @@ class DroneController:
 
         return MissionExecutionResult(
             status="TRANSIT",
-            success=False,
+            success=True,
             water_used_l=0.0,
-            reason="Navigation requested; waiting for arrival",
+            reason="Navigating to assigned hotspot",
         )
 
     def step_extinguish(
@@ -194,12 +267,14 @@ class DroneController:
         drone: DroneState,
         hotspot: Hotspot,
         task: Task,
+        *,
         altitude_agl_m: float,
     ) -> MissionExecutionResult:
-        """Advance an extinguishing mission by one simulation step.
+        """
+        Advance an active extinguishing mission by one step.
 
-        This method never assumes goto() means arrival. It checks at_target()
-        and uses the latest autopilot and payload telemetry before releasing.
+        The final water-release decision is made only after arrival and
+        all safety gates pass.
         """
 
         if self.autopilot is None or self.payload is None:
@@ -207,32 +282,33 @@ class DroneController:
                 "Mission execution requires an autopilot and payload"
             )
 
-        if self._active_task_id != task.task_id:
-            raise ValueError("This task has not been started by this controller")
-
+        # Once a mission has completed, return the exact same terminal
+        # result and never release payload again.
         if self._terminal_result is not None:
             return self._terminal_result
 
-        if not self.autopilot.at_target():
+        if self._active_task_id != task.task_id:
+            return MissionExecutionResult(
+                status="REJECTED",
+                success=False,
+                water_used_l=0.0,
+                reason="No active mission for this task",
+            )
+
+        # Do not release while the drone is still travelling.
+        if not self.autopilot.at_target(
+            tolerance_m=self.drop_limits.max_distance_m
+        ):
             return MissionExecutionResult(
                 status="TRANSIT",
-                success=False,
+                success=True,
                 water_used_l=0.0,
                 reason="Drone has not reached the hotspot",
             )
 
-        # Use live telemetry rather than stale values from the original
-        # DroneState snapshot.
-        current_drone = drone.model_copy(
-            update={
-                "position": self.autopilot.position(),
-                "speed_mps": self.autopilot.speed_mps(),
-                "water_remaining_l": self.payload.water_remaining_l(),
-            }
-        )
-
+        # Final drop gate. This must happen immediately before release.
         decision = self.check_drop(
-            current_drone,
+            drone,
             hotspot,
             task,
             altitude_agl_m,
@@ -241,40 +317,46 @@ class DroneController:
         if not decision.should_drop:
             self.autopilot.hold()
 
-            self._terminal_result = MissionExecutionResult(
+            result = MissionExecutionResult(
                 status="REJECTED",
                 success=False,
                 water_used_l=0.0,
                 reason=decision.reason,
             )
-            return self._terminal_result
 
-        actual_l = self.payload.release(
+            return result
+
+        released = self.payload.release(
             decision.water_to_release_liters,
-            at=self.autopilot.position(),
+            hotspot.position,
         )
 
-        if not isfinite(actual_l) or actual_l < 0:
-            raise ValueError("Payload returned an invalid release amount")
+        if released is None:
+            released_l = decision.water_to_release_liters
+        else:
+            released_l = float(released)
 
-        if actual_l > decision.water_to_release_liters + 1e-6:
-            raise ValueError("Payload released more water than requested")
-
-        self.autopilot.hold()
-
-        if actual_l <= 0:
-            self._terminal_result = MissionExecutionResult(
+        if released_l <= 0:
+            result = MissionExecutionResult(
                 status="FAILED",
                 success=False,
                 water_used_l=0.0,
-                reason="Payload did not release any water",
+                reason="Payload release produced no water",
             )
-            return self._terminal_result
 
-        self._terminal_result = MissionExecutionResult(
+            self._terminal_result = result
+            self._active_task_id = None
+
+            return result
+
+        result = MissionExecutionResult(
             status="DONE",
             success=True,
-            water_used_l=actual_l,
-            reason="Water release completed",
+            water_used_l=released_l,
+            reason="Water released successfully",
         )
-        return self._terminal_result
+
+        self._terminal_result = result
+        self._active_task_id = None
+
+        return result
