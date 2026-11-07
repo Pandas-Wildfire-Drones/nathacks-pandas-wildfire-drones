@@ -1,43 +1,71 @@
-"""Checks whether two drones' planned paths come too close to each other. Each path point is (x, y, altitude) in metres. The paths must be sampled at the same time intervals."""
+"""Detect unsafe proximity between synchronized 3D drone paths."""
 
 from dataclasses import dataclass
-from math import dist
+from math import dist, isfinite
+
+from contracts.geometry import Position
 
 
-@dataclass
+@dataclass(frozen=True)
 class Conflict:
+    """A timestep where two planned drone positions are too close."""
+
     timestep: int
     distance_m: float
+
+
+def _coordinates(point) -> tuple[float, float, float]:
+    """Normalize a Position or an (x, y, z) tuple into coordinates."""
+    if isinstance(point, Position):
+        coordinates = (point.x, point.y, point.z)
+    else:
+        try:
+            if len(point) != 3:
+                raise ValueError("Each path point must have exactly 3 coordinates")
+            coordinates = tuple(float(value) for value in point)
+        except TypeError as exc:
+            raise ValueError(
+                "Each path point must be a Position or an (x, y, z) tuple"
+            ) from exc
+
+    if not all(isfinite(value) for value in coordinates):
+        raise ValueError("Path coordinates must be finite")
+
+    return coordinates
 
 
 def detect_conflicts(
     proposed_path,
     other_paths,
     minimum_separation_m,
-):
-    """
-    Compare a proposed 3D path against other synchronized paths.
+) -> list[Conflict]:
+    """Detect close approaches between synchronized 3D paths.
 
-    Each point is (x, y, altitude), in metres.
-    Returns a list of detected conflicts.
-    """
-    if minimum_separation_m < 0:
-        raise ValueError("Minimum separation cannot be negative")
+    Path points are compared at matching timestep indices. Each point may
+    be a shared Position contract or an (x, y, z) tuple, in metres.
 
+    Only overlapping timesteps are compared. A conflict is reported when
+    3D distance is strictly less than minimum_separation_m.
+    """
+    if not isfinite(minimum_separation_m) or minimum_separation_m < 0:
+        raise ValueError("Minimum separation must be finite and non-negative")
+
+    proposed = [_coordinates(point) for point in proposed_path]
     conflicts = []
 
     for other_path in other_paths:
-        shared_steps = min(len(proposed_path), len(other_path))
+        other = [_coordinates(point) for point in other_path]
+        shared_steps = min(len(proposed), len(other))
 
         for timestep in range(shared_steps):
-            distance = dist(
-                proposed_path[timestep],
-                other_path[timestep],
-            )
+            distance_m = dist(proposed[timestep], other[timestep])
 
-            if distance < minimum_separation_m:
+            if distance_m < minimum_separation_m:
                 conflicts.append(
-                    Conflict(timestep=timestep, distance_m=distance)
+                    Conflict(
+                        timestep=timestep,
+                        distance_m=distance_m,
+                    )
                 )
 
     return conflicts
