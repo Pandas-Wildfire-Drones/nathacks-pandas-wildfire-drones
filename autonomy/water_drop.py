@@ -81,6 +81,13 @@ def evaluate_water_drop(
     if task.assigned_to != drone.drone_id:
         return _reject("Task is not assigned to this drone")
 
+    if task.epoch != drone.epoch:
+        return _reject("Task epoch does not match drone epoch")
+
+    if hotspot.assigned_to is not None:
+        if hotspot.assigned_to != drone.drone_id:
+            return _reject("Hotspot is assigned to another drone")
+
     if hotspot.confidence < limits.min_confidence:
         return _reject("Target confidence too low")
 
