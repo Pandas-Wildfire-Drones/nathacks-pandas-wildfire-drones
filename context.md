@@ -341,6 +341,8 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
     - *Image-level Fire / No-Fire* comes from the frame's **max TIFF temperature**: < ~80 °C → no fire, > ~200 °C → fire. Frames in between are "manually reviewed or excluded". The authors call these thresholds "practical heuristics", tuned to their prescribed burns (typically 55–650 °C, §III.B).
     - *Pixel masks:* the paper describes none. It only says TIFFs *enable* masks via direct, Otsu or hysteresis thresholding; S20 reports thresholded masks. Treat any mask as a threshold unless `python -m training.check_masks` says otherwise (it detects global and per-frame cutoffs).
     - **Consequence:** a threshold + CNN pipeline scores optimistically against these labels. The hard 80–200 °C band (warm decoys, smouldering spots) is under-represented. Report F1 **per max-T band** (< 80 / 80–200 / > 200 °C), and don't cite overall FLAME 3 F1 as evidence for the > 90% criterion. Never copy 80/200 °C into `perception/` as constants.
+    - **Training data = synthetic fires on real FLAME 3 No-Fire backgrounds** (`python -m training.composite`): exact masks, radiance mixing, real clutter and noise, groups kept. `objects.csv` gives each fire's observed band for per-band F1. Plain synthetic data (`perception/synth.py`) stays the night test set.
+    - HIT-UAV and BIRDSAI [S21] are **8-bit** (HIT-UAV "bit depth is 8"; BIRDSAI real frames are `.jpg`): no °C, so they can't feed the temperature-channel CNN.
     - The Kaggle subset is **one burn**, so groups = time blocks.
     - Citation (requested by the authors) and full notes: `training/FLAME3.md`. Data list: `exclude/DATA_SOURCES.md`; workflow: `exclude/training_README.md` (local, gitignored).
 
@@ -348,7 +350,7 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
 
 ## 11. Contracts
 
-**Install/test:** `pip install -e .[dev]` (perception: `.[dev,perception]`, training: `.[dev,train]`) · `python -m pytest -q` (56 contract tests + 22 perception tests; the ONNX round-trip test needs `.[train]`, otherwise it is skipped) · `python tools/sync_contracts.py` refreshes the code below. CI (`.github/workflows/tests.yml`) runs the whole suite on every push to `main` and every PR into `main`: keep it green before merging.
+**Install/test:** `pip install -e .[dev]` (perception: `.[dev,perception]`, training: `.[dev,train]`) · `python -m pytest -q` (56 contract tests + perception/training tests; the ONNX round-trip test needs `.[train]`, otherwise it is skipped) · `python tools/sync_contracts.py` refreshes the code below. CI (`.github/workflows/tests.yml`) runs the whole suite on every push to `main` and every PR into `main`: keep it green before merging.
 
 **How to use:** build messages with `SwarmMessage.create(sender_id, body, now, seq=…, receiver_id=…)`; publish on `topic_for(msg)`; serialize with `encode()`, parse with `decode()`; match subscriptions with `topic_matches()`; implement `Bus`/`Clock`/`Autopilot`/`PayloadSystem`/`Detector`/`Georeferencer` from `interfaces.py`.
 
@@ -1890,7 +1892,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
-| 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
+| 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; `training/composite.py` (synthetic fires on real No-Fire backgrounds, 6 tests); HIT-UAV/BIRDSAI ruled out (8-bit); CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
 | 2026-11-07 | perception chat (C) | decisions 0001 (ACCEPTED A) – 0004 in `docs/decisions/`; PatchSpec v2 scale-normalized patches; confirm/verify stage (`perception/confirm.py`, `evaluate_confirm.py`); precision-first confirm threshold; hot-blob bypass rule replaces 300 °C; sensor wiring (`frame_context.py`, `terrain.py`, `distortion.py`); seeker altimeter in §6.3; no contract changes | user decisions on altitude, bypass, sensors, confirm stage |
 | 2026-11-07 | perception chat (C) | added `training/check_masks.py` (mask audit), decision doc 0001 (altitude vs lidar, PROPOSED), §12 items 10–11 (altimeter gap, Boson+ saturation 350 °C vs config 550 °C) | follow-up questions on masks, lidar, hot-bypass |
 | 2026-11-07 | perception chat (C) | v0.3: added `perception/` (threshold, FUSED CNN verifier, fake detector, georef, log-odds map, tracker, metrics, synthetic radiometric frames, pipeline evaluator) and `training/` (group CV, recall-first threshold, ONNX export; GBM = stretch), `exclude/` gitignored; §2/§3/§5/§10/§12 updated; no contract changes (77 tests) | perception workstream kickoff |
