@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.1` · `contract_version: 0.2.0` · last updated 2026-11-07
+`context_version: 0.3.2` · `contract_version: 0.2.0` · last updated 2026-11-07
 
 ---
 
@@ -346,9 +346,10 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
     - **Training data = synthetic fires on real FLAME 3 No-Fire backgrounds** (`python -m training.composite`): exact masks, radiance mixing, real clutter and noise, groups kept. `objects.csv` gives each fire's observed band for per-band F1. Plain synthetic data (`perception/synth.py`) stays the night test set.
     - **Workflow:** `training/train_verifier.ipynb` runs the loop (data → composites → group split → patches → CV with plots → ONNX → test once → hand-labelled band), calling the same modules as the CLI. Laptop is enough (tiny CNN); Colab only needs `patches.npz` (tens of MB). Raw data never goes to GitHub or Drive in bulk.
     - **Hand-labelled hard band (optional test set):** `training/label_tool.py`. A person labels 80–200 °C blobs from the paired RGB photo; Cohen's kappa checks agreement between two labellers.
-    - **FLAME 3 cameras** `[SOURCED S13 Table III]`: Autel 640T (Hanna Hammock, Hundred, Wild Bill), M30T (Sycan), M2EA (Shoetank, Willamette), all 640×512. **High gain clips at 150 °C** (inside the hard band), low gain at 450–550 °C. Thermal GSD ≈ 17.6 cm/px at 122 m nadir (M30T); oblique frames 61–122 m. No-Fire frames are mostly pre-burn oblique imagery.
+    - **FLAME 3 cameras** `[SOURCED S13 Table III]`: Autel 640T (Hanna Hammock, Hundred, Wild Bill), M30T (Sycan), M2EA (Shoetank, Willamette), all 640×512. Paper: high gain clips at 150 °C, low gain at 450–550 °C; GSD ≈ 17.6 cm/px at 122 m nadir (M30T).
+    - **Sycan CV subset, measured on the download** (`training/FLAME3.md` table; `python -m training.build_manifest_flame3`): 622 Fire + 116 No Fire, captured 15:00–19:23 local (day/dusk). **Every frame is oblique** (gimbal pitch median −15°, range −46…+12°), 55–124 m above takeoff, so GSD changes per row (centre median ≈ 0.32 m/px, 4–14× coarser than our seeker). Geometry comes from the raw RGB's DJI XMP (height, pitch, laser-rangefinder slant range); focal ≈ 696 px. M30T clips measured at **187.4 °C (high gain) / 608.7 °C (low gain)**. **All 84 Fire frames with max T in 80–200 °C are high-gain frames** (67 exactly at the clip), so frame-level "hard band" Sycan data is clipping, not smouldering. File stems are shuffled and restart per class folder: pair by folder + stem, order by EXIF time. Manifests now carry optional `agl_m`, `pitch_deg`, `focal_px`, `saturation_c`, `rgb_path`, `timestamp` (`perception/datasets.py`); patches, composites and evaluation use a per-row GSD on oblique frames.
     - HIT-UAV and BIRDSAI [S21] are **8-bit** (HIT-UAV "bit depth is 8"; BIRDSAI real frames are `.jpg`): no °C, so they can't feed the temperature-channel CNN.
-    - The Kaggle subset is **one burn**, so groups = time blocks.
+    - The Kaggle subset is **one burn**, so groups = day × 250 m ground cell of the image-centre ground point (37 groups; No Fire 14).
     - Citation (requested by the authors) and full notes: `training/FLAME3.md`. Data list: `exclude/DATA_SOURCES.md`; workflow: `exclude/training_README.md` (local, gitignored).
 
 ---

@@ -42,7 +42,8 @@ class PatchClassifier(Protocol):
 
     def predict_proba(self, temp_c: np.ndarray, centers_uv: list[tuple[float, float]],
                       gsd_m: float | None = None) -> np.ndarray:
-        """p(fire) in [0, 1] for each centre, shape (N,). gsd_m = metres per pixel of this frame, if known."""
+        """p(fire) in [0, 1] for each centre, shape (N,). gsd_m = metres per pixel of this frame, if known: a scalar
+        (nadir drone camera) or one value per centre (oblique dataset frames, perception.patches.GsdArg)."""
         ...
 
 

@@ -67,7 +67,9 @@ class _Acc:
 
 def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object],
                       bypass: HotBypassRule = HotBypassRule()) -> dict:
-    """Frames use their manifest gsd_m (scale-normalized patches, bypass 'oversize' window) when present."""
+    """Frames use their manifest GSD (scale-normalized patches, bypass 'oversize' window) when present: gsd_m, or the
+    per-row GSD of oblique frames with view geometry (FrameRecord.gsd_rows). A per-frame saturation_c (gain mode)
+    overrides the bypass rule's saturation."""
     proposer = ThresholdDetector()
     fused = {name: FusedDetector(clf, proposer, bypass=bypass) for name, clf in classifiers.items()}
     fused_nobypass = {name: FusedDetector(clf, proposer, bypass=HotBypassRule(enabled=False))
@@ -100,10 +102,12 @@ def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object]
             patch_y.extend(blob_label(b.bbox, mask) for b in blobs)
             patch_scores["threshold"].extend(peaks.tolist())
 
+        rows = rec.gsd_rows(temp.shape[0]) if rec.has_geometry else None
+        gsd = (lambda v, g=rows[0]: float(g[min(max(int(v), 0), len(g) - 1)])) if rows is not None else rec.gsd_m
         for name, det in fused.items():
             t0 = time.perf_counter()
-            _, probs = det.score_blobs(temp, rec.gsd_m)
-            dets = det.decide(temp, blobs, probs, rec.gsd_m)
+            _, probs = det.score_blobs(temp, gsd)
+            dets = det.decide(temp, blobs, probs, gsd, saturation_c=rec.saturation_c)
             lat[f"fused:{name}"].append(time.perf_counter() - t0)
             acc[f"fused:{name}"].add(rec.group, [(d.u, d.v) for d in dets], gts, y_frame)
             for b, why in zip(blobs, det.last_bypass_reasons):
@@ -112,7 +116,7 @@ def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object]
                     bs["fired"] += 1
                     if mask is not None and not blob_label(b.bbox, mask):
                         bs["on_non_fire"] += 1
-            nb = fused_nobypass[name].decide(temp, blobs, probs, rec.gsd_m)
+            nb = fused_nobypass[name].decide(temp, blobs, probs, gsd)
             acc[f"fused:{name}:no_bypass"].add(rec.group, [(d.u, d.v) for d in nb], gts, y_frame)
             if mask is not None:
                 patch_scores[name].extend(np.asarray(probs).tolist())
@@ -123,7 +127,7 @@ def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object]
                "bypass": {"trigger_c": bypass.trigger_c, "saturation_c": bypass.saturation_c,
                           "min_hot_px": bypass.min_hot_px,
                           "by_classifier": {n: dict(v) for n, v in bypass_stats.items()}},
-               "scale_normalized_frames": int(sum(r.gsd_m is not None for r in records))}
+               "scale_normalized_frames": int(sum(r.has_gsd for r in records))}
     if patch_y:
         y = np.array(patch_y)
         patch = {"n": int(len(y)), "positives": int(y.sum())}
