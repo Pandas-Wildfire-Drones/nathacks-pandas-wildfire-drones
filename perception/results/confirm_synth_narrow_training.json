@@ -1,0 +1,106 @@
+{
+  "results": {
+    "scale_trained_70-90m": {
+      "by_bucket": {
+        "decoy": {
+          "FALSE_POSITIVE": 142,
+          "INCONCLUSIVE": 14,
+          "CONFIRMED": 1
+        },
+        "fire 0.1-1 m\u00b2": {
+          "INCONCLUSIVE": 1,
+          "CONFIRMED": 57
+        },
+        "fire <0.1 m\u00b2": {
+          "CONFIRMED": 44,
+          "FALSE_POSITIVE": 1
+        },
+        "fire >1 m\u00b2": {
+          "CONFIRMED": 40
+        }
+      },
+      "search_80m_by_bucket": {
+        "decoy": {
+          "missed": 157
+        },
+        "fire 0.1-1 m\u00b2": {
+          "detected": 58
+        },
+        "fire <0.1 m\u00b2": {
+          "detected": 45
+        },
+        "fire >1 m\u00b2": {
+          "detected": 40
+        }
+      },
+      "confirm_precision": 0.9929577464788732,
+      "confirm_recall_of_fires": 0.986013986013986,
+      "fires_wrongly_rejected": 1,
+      "decoys_confirmed": 1,
+      "decoys_rejected": 142,
+      "inconclusive": 15,
+      "thresholds": {
+        "confirm": 0.6798855066299438,
+        "reject": 0.10567132383584976
+      },
+      "scale_normalized": true
+    },
+    "plain_trained_70-90m": {
+      "by_bucket": {
+        "decoy": {
+          "FALSE_POSITIVE": 156,
+          "INCONCLUSIVE": 1
+        },
+        "fire 0.1-1 m\u00b2": {
+          "CONFIRMED": 58
+        },
+        "fire <0.1 m\u00b2": {
+          "CONFIRMED": 44,
+          "FALSE_POSITIVE": 1
+        },
+        "fire >1 m\u00b2": {
+          "CONFIRMED": 40
+        }
+      },
+      "search_80m_by_bucket": {
+        "decoy": {
+          "missed": 157
+        },
+        "fire 0.1-1 m\u00b2": {
+          "detected": 58
+        },
+        "fire <0.1 m\u00b2": {
+          "detected": 45
+        },
+        "fire >1 m\u00b2": {
+          "detected": 40
+        }
+      },
+      "confirm_precision": 1.0,
+      "confirm_recall_of_fires": 0.993006993006993,
+      "fires_wrongly_rejected": 1,
+      "decoys_confirmed": 0,
+      "decoys_rejected": 156,
+      "inconclusive": 1,
+      "thresholds": {
+        "confirm": 0.6793878078460693,
+        "reject": 0.08841007947921753
+      },
+      "scale_normalized": false
+    }
+  },
+  "targets": 300,
+  "frames": 9,
+  "confirm_agl": [
+    25.0,
+    40.0
+  ],
+  "status_values": [
+    "DETECTED",
+    "CONFIRMED",
+    "ASSIGNED",
+    "SUPPRESSED",
+    "VERIFIED_OUT",
+    "FALSE_POSITIVE"
+  ]
+}
