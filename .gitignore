@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-*.env
-backend/.venv/
-=======
 # Python bytecode and test caches
 __pycache__/
 *.py[cod]
@@ -17,4 +13,14 @@ exclude/
 
 # Claude local configuration
 .claude
->>>>>>> 9a687b6c46c29b8199152cfc15b81d2943dd59f0
+
+
+.aistudio/
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
