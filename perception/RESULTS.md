@@ -218,3 +218,168 @@ Synthetic behaviour check (decoys are cooler than fires by construction; backgro
 | plain_trained_70-90m | fire <0.1 m² | 44 | 1 | 0 | 45 / 0 |
 | plain_trained_70-90m | fire >1 m² | 40 | 0 | 0 | 40 / 0 |
 <!-- END:confirm_synth_narrow_training -->
+
+<!-- BEGIN:cnn_cv_flame3_composite -->
+### CNN verifier (PRIMARY): 5-fold group CV · flame3_composite
+
+Patch-level, on classical proposals + mask-centred positives. 8042 patches (1108 fire / 6934 not, 6610 hard negatives), 10 groups. Threshold rule: recall >= 0.95 then max precision; each fold's threshold is chosen on the other folds. Epochs 20, width 16, augment True.
+
+| | precision | recall | f1 | f2 | accuracy | ap | roc_auc |
+|---|---|---|---|---|---|---|---|
+| fold 0 (n=5866, pos=443, thr=0.882) | 0.954 | 0.928 | 0.941 | 0.933 | 0.991 | 0.957 | 0.991 |
+| fold 1 (n=661, pos=129, thr=0.834) | 0.992 | 0.915 | 0.952 | 0.929 | 0.982 | 0.996 | 0.999 |
+| fold 2 (n=449, pos=124, thr=0.747) | 1.000 | 0.968 | 0.984 | 0.974 | 0.991 | 0.998 | 0.999 |
+| fold 3 (n=500, pos=188, thr=0.747) | 0.989 | 0.984 | 0.987 | 0.985 | 0.990 | 0.999 | 0.999 |
+| fold 4 (n=566, pos=224, thr=0.747) | 0.982 | 0.982 | 0.982 | 0.982 | 0.986 | 0.997 | 0.998 |
+| **mean ± std over folds** | 0.983 ± 0.016 | 0.955 ± 0.029 | 0.969 ± 0.019 | 0.961 ± 0.025 | 0.988 ± 0.004 | 0.989 ± 0.016 | 0.997 ± 0.003 |
+| pooled OOF @ final thr 0.747 | 0.969 | 0.960 | 0.965 | 0.962 | 0.990 | 0.985 | 0.996 |
+| pooled OOF @ 0.5 (reference) | 0.934 | 0.976 | 0.955 | 0.967 | 0.987 |  |  |
+| CONFIRM op. point @ 0.904 (precision >= 0.98) | 0.981 | 0.941 | 0.961 | 0.949 | 0.989 |  |  |
+
+Accuracy is shown for completeness only (class imbalance makes it misleading; see perception/evaluation.py).
+Patches scale-normalized by GSD: True.
+
+**Hot-blob bypass data check** (trigger 495 °C = 0.9 × saturation 550 °C): hottest non-fire patch 88.5 °C (p99.9 85.2 °C, patch centre); non-fire patches that could bypass the CNN (upper bound): **0** of 6934. The blob-based count on the test split is in the pipeline section.
+<!-- END:cnn_cv_flame3_composite -->
+
+<!-- BEGIN:cnn_cv_flame3_composite_plain -->
+### CNN verifier (PRIMARY): 5-fold group CV · flame3_composite_plain
+
+Patch-level, on classical proposals + mask-centred positives. 8042 patches (1108 fire / 6934 not, 6610 hard negatives), 10 groups. Threshold rule: recall >= 0.95 then max precision; each fold's threshold is chosen on the other folds. Epochs 20, width 16, augment True.
+
+| | precision | recall | f1 | f2 | accuracy | ap | roc_auc |
+|---|---|---|---|---|---|---|---|
+| fold 0 (n=5866, pos=443, thr=0.970) | 0.973 | 0.878 | 0.923 | 0.895 | 0.989 | 0.979 | 0.998 |
+| fold 1 (n=661, pos=129, thr=0.777) | 0.970 | 1.000 | 0.985 | 0.994 | 0.994 | 0.997 | 0.999 |
+| fold 2 (n=449, pos=124, thr=0.905) | 0.992 | 0.984 | 0.988 | 0.985 | 0.993 | 1.000 | 1.000 |
+| fold 3 (n=500, pos=188, thr=0.777) | 0.995 | 1.000 | 0.997 | 0.999 | 0.998 | 1.000 | 1.000 |
+| fold 4 (n=566, pos=224, thr=0.931) | 0.986 | 0.955 | 0.971 | 0.961 | 0.977 | 0.998 | 0.999 |
+| **mean ± std over folds** | 0.983 ± 0.010 | 0.963 ± 0.046 | 0.973 ± 0.026 | 0.967 ± 0.038 | 0.990 ± 0.007 | 0.995 ± 0.008 | 0.999 ± 0.001 |
+| pooled OOF @ final thr 0.939 | 0.983 | 0.950 | 0.966 | 0.957 | 0.991 | 0.991 | 0.999 |
+| pooled OOF @ 0.5 (reference) | 0.971 | 0.980 | 0.975 | 0.978 | 0.993 |  |  |
+| CONFIRM op. point @ 0.939 (precision >= 0.98) | 0.983 | 0.950 | 0.966 | 0.957 | 0.991 |  |  |
+
+Accuracy is shown for completeness only (class imbalance makes it misleading; see perception/evaluation.py).
+Patches scale-normalized by GSD: False.
+
+**Hot-blob bypass data check** (trigger 495 °C = 0.9 × saturation 550 °C): hottest non-fire patch 458.8 °C (p99.9 86.6 °C, patch centre); non-fire patches that could bypass the CNN (upper bound): **0** of 6934. The blob-based count on the test split is in the pipeline section.
+<!-- END:cnn_cv_flame3_composite_plain -->
+
+<!-- BEGIN:pipeline_test_cnn_flame3 -->
+### Pipeline evaluation: FLAME 3 Sycan composites, 4 held-out ground cells (cnn_flame3)
+
+140 frames, 4 groups (flights/burns). Thresholds were chosen recall-first on training CV and never tuned on this split.
+
+**Frame level** (does the frame contain fire):
+
+| | precision | recall | f1 | accuracy |
+|---|---|---|---|---|
+| THRESHOLD only (peak >= 60 C, classical) | 0.976 | 0.920 | 0.947 | 0.936 |
+| all classical proposals (recall ceiling) | 0.674 | 1.000 | 0.806 | 0.700 |
+| FUSED + CNN (PRIMARY) | 1.000 | 1.000 | 1.000 | 1.000 |
+| FUSED + CNN, no hot-bypass (PRIMARY) | 1.000 | 1.000 | 1.000 | 1.000 |
+
+**Patch level** (verifier on 2893 proposals, 162 fire):
+
+| | precision | recall | f1 | ap | roc_auc | threshold |
+|---|---|---|---|---|---|---|
+| peak temperature verifier | 0.893 | 0.821 | 0.855 | 0.930 | 0.985 | 60.000 |
+| CNN (PRIMARY) verifier | 0.940 | 0.975 | 0.958 | 0.986 | 0.997 | 0.747 |
+
+**Hot-blob bypass** (trigger ≥ 3 px at ≥ 495 °C = 0.9 × saturation 550 °C, or blob larger than the patch): CNN saturated: fired 6x, 0 on non-fire; CNN oversize: fired 25x, 0 on non-fire.
+
+CPU latency per frame (ms, this machine): threshold 8.4, fused:cnn 18.1
+Budget at 9 Hz is 111 ms/frame on the Jetson (context.md 6.5).
+<!-- END:pipeline_test_cnn_flame3 -->
+
+<!-- BEGIN:pipeline_test_cnn_flame3_plain -->
+### Pipeline evaluation: FLAME 3 Sycan composites, 4 held-out ground cells (cnn_flame3_plain)
+
+140 frames, 4 groups (flights/burns). Thresholds were chosen recall-first on training CV and never tuned on this split.
+
+**Frame level** (does the frame contain fire):
+
+| | precision | recall | f1 | accuracy |
+|---|---|---|---|---|
+| THRESHOLD only (peak >= 60 C, classical) | 0.976 | 0.920 | 0.947 | 0.936 |
+| all classical proposals (recall ceiling) | 0.674 | 1.000 | 0.806 | 0.700 |
+| FUSED + CNN (PRIMARY) | 1.000 | 0.989 | 0.994 | 0.993 |
+| FUSED + CNN, no hot-bypass (PRIMARY) | 1.000 | 0.989 | 0.994 | 0.993 |
+
+**Patch level** (verifier on 2893 proposals, 162 fire):
+
+| | precision | recall | f1 | ap | roc_auc | threshold |
+|---|---|---|---|---|---|---|
+| peak temperature verifier | 0.893 | 0.821 | 0.855 | 0.930 | 0.985 | 60.000 |
+| CNN (PRIMARY) verifier | 0.934 | 0.963 | 0.948 | 0.975 | 0.997 | 0.939 |
+
+**Hot-blob bypass** (trigger ≥ 3 px at ≥ 495 °C = 0.9 × saturation 550 °C, or blob larger than the patch): CNN saturated: fired 6x, 0 on non-fire.
+
+CPU latency per frame (ms, this machine): threshold 8.4, fused:cnn 17.3
+Budget at 9 Hz is 111 ms/frame on the Jetson (context.md 6.5).
+<!-- END:pipeline_test_cnn_flame3_plain -->
+
+<!-- BEGIN:pipeline_test_flame3_by_synth_model -->
+### Pipeline evaluation: FLAME 3 Sycan composites, shipped synthetic model
+
+140 frames, 4 groups (flights/burns). Thresholds were chosen recall-first on training CV and never tuned on this split.
+
+**Frame level** (does the frame contain fire):
+
+| | precision | recall | f1 | accuracy |
+|---|---|---|---|---|
+| THRESHOLD only (peak >= 60 C, classical) | 0.976 | 0.920 | 0.947 | 0.936 |
+| all classical proposals (recall ceiling) | 0.674 | 1.000 | 0.806 | 0.700 |
+| FUSED + CNN (PRIMARY) | 1.000 | 0.713 | 0.832 | 0.821 |
+| FUSED + CNN, no hot-bypass (PRIMARY) | 1.000 | 0.713 | 0.832 | 0.821 |
+
+**Patch level** (verifier on 2893 proposals, 162 fire):
+
+| | precision | recall | f1 | ap | roc_auc | threshold |
+|---|---|---|---|---|---|---|
+| peak temperature verifier | 0.893 | 0.821 | 0.855 | 0.930 | 0.985 | 60.000 |
+| CNN (PRIMARY) verifier | 1.000 | 0.549 | 0.709 | 0.843 | 0.891 | 0.955 |
+
+**Hot-blob bypass** (trigger ≥ 3 px at ≥ 495 °C = 0.9 × saturation 550 °C, or blob larger than the patch): CNN saturated: fired 6x, 0 on non-fire; CNN oversize: fired 25x, 0 on non-fire.
+
+CPU latency per frame (ms, this machine): threshold 8.5, fused:cnn 18.1
+Budget at 9 Hz is 111 ms/frame on the Jetson (context.md 6.5).
+<!-- END:pipeline_test_flame3_by_synth_model -->
+
+<!-- BEGIN:pipeline_test_synth_by_flame3_model -->
+### Pipeline evaluation: synthetic night test flights, FLAME 3 composite model
+
+160 frames, 4 groups (flights/burns). Thresholds were chosen recall-first on training CV and never tuned on this split.
+
+**Object level** (detections matched to mask components):
+
+| | precision | recall | f1 | f2 |
+|---|---|---|---|---|
+| THRESHOLD only (peak >= 60 C, classical) | 0.858 | 0.978 | 0.915 | 0.952 |
+| all classical proposals (recall ceiling) | 0.493 | 0.978 | 0.656 | 0.818 |
+| FUSED + CNN (PRIMARY) | 0.924 | 0.978 | 0.950 | 0.967 |
+| FUSED + CNN, no hot-bypass (PRIMARY) | 0.929 | 0.978 | 0.953 | 0.968 |
+
+95% CI on F1 (bootstrap over groups): THRESHOLD only (peak >= 60 C, classical) [0.880, 0.940], FUSED + CNN (PRIMARY) [0.893, 0.989], FUSED + CNN, no hot-bypass (PRIMARY) [0.900, 0.989]
+
+**Frame level** (does the frame contain fire):
+
+| | precision | recall | f1 | accuracy |
+|---|---|---|---|---|
+| THRESHOLD only (peak >= 60 C, classical) | 0.919 | 1.000 | 0.958 | 0.944 |
+| all classical proposals (recall ceiling) | 0.734 | 1.000 | 0.846 | 0.769 |
+| FUSED + CNN (PRIMARY) | 0.981 | 1.000 | 0.990 | 0.988 |
+| FUSED + CNN, no hot-bypass (PRIMARY) | 0.981 | 0.990 | 0.985 | 0.981 |
+
+**Patch level** (verifier on 369 proposals, 189 fire):
+
+| | precision | recall | f1 | ap | roc_auc | threshold |
+|---|---|---|---|---|---|---|
+| peak temperature verifier | 0.877 | 0.984 | 0.928 | 0.995 | 0.993 | 60.000 |
+| CNN (PRIMARY) verifier | 0.949 | 0.984 | 0.966 | 0.969 | 0.989 | 0.747 |
+
+**Hot-blob bypass** (trigger ≥ 3 px at ≥ 495 °C = 0.9 × saturation 550 °C, or blob larger than the patch): CNN saturated: fired 37x, 0 on non-fire; CNN oversize: fired 29x, 0 on non-fire.
+
+CPU latency per frame (ms, this machine): threshold 1.7, fused:cnn 2.6
+Budget at 9 Hz is 111 ms/frame on the Jetson (context.md 6.5).
+<!-- END:pipeline_test_synth_by_flame3_model -->

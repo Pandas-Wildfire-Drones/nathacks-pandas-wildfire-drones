@@ -66,6 +66,27 @@ flares, sun-heated rock at dusk) overlap fires in temperature, and that's where 
 change with altitude), but on synthetic data the CNN coped either way. **Re-run this A/B on real data**
 (`train_cnn --no-scale-normalize` vs default) once FLAME 3 altitude metadata is known, and keep whichever wins.
 
+**Update 2026-11-07: A/B re-run on FLAME 3 (issue #4).** Altitude is known now: the raw RGB twin of each Sycan frame
+carries DJI XMP (height, gimbal pitch, laser range), and every frame is **oblique** (pitch median −15°), so GSD is
+computed per image row (0.14–1 m/px; `training/FLAME3.md`). Data: synthetic fires + decoys composited onto the 116 real
+No-Fire frames (`training/composite.py`, foreshortened, ground-only), 10 train / 4 test ground-cell groups, same split
+and seed for both arms (`bash training/retrain_flame3.sh`).
+
+| Patches | CV F1 (5 folds) | CV AP | Test patch F1 / AP | Test object F1 [95% CI] | Test frame F1 |
+|---|---|---|---|---|---|
+| scale-normalized (per-row GSD) | 0.969 ± 0.019 | 0.989 | 0.958 / 0.986 | 0.940 [0.90, 0.97] | 1.000 |
+| plain crops | 0.973 ± 0.026 | 0.995 | 0.948 / 0.975 | 0.934 [0.90, 0.96] | 0.994 |
+
+**Reading:** still a tie within noise (CV favours plain by 0.004 F1, the held-out test favours scale-normalized by
+0.006–0.010). Real backgrounds didn't make scale normalization *necessary*, and it didn't hurt. **Kept: PatchSpec v2
+(scale-normalized) stays the default**, because it is the physically right input when one model serves 80 m search
+and 30 m confirm. Cross-domain check on the same split: the shipped synthetic-only model scores object F1
+**0.698** (recall 0.54) on these real backgrounds, while the composite model scores **0.950** on the synthetic night
+test set. Real backgrounds matter far more than the patch-scaling choice.
+Limits: fires are still synthetic; Sycan frames are daytime and oblique (the seeker is nadir at night); 4 test groups.
+The NADIR plot set (Hanna Hammock, 122 m nadir) is the better place for a decisive scale test, and hand-labelled real
+blobs (`training/label_tool.py`) are the only real-fire check.
+
 For context, single-frame search from 80 m on the same targets: 143/143 fires detected, 0/157 decoys passed.
 
 ## Assumptions

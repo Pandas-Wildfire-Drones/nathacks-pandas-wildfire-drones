@@ -1,0 +1,289 @@
+{
+  "n_frames": 160,
+  "n_groups": 4,
+  "has_masks": true,
+  "variants": {
+    "threshold": {
+      "frame": {
+        "tp": 102,
+        "fp": 9,
+        "fn": 0,
+        "precision": 0.918918918918919,
+        "recall": 1.0,
+        "f1": 0.9577464788732395,
+        "f2": 0.9826589595375723,
+        "tn": 49,
+        "accuracy": 0.94375,
+        "specificity": 0.8448275862068966
+      },
+      "object": {
+        "tp": 182,
+        "fp": 30,
+        "fn": 4,
+        "precision": 0.8584905660377359,
+        "recall": 0.978494623655914,
+        "f1": 0.914572864321608,
+        "f2": 0.9518828451882845,
+        "duplicates": 0,
+        "f1_ci95_by_group": [
+          0.88,
+          0.94
+        ],
+        "recall_ci95_by_group": [
+          0.9655172413793104,
+          0.9947643979057592
+        ]
+      }
+    },
+    "proposals": {
+      "frame": {
+        "tp": 102,
+        "fp": 37,
+        "fn": 0,
+        "precision": 0.7338129496402878,
+        "recall": 1.0,
+        "f1": 0.8464730290456433,
+        "f2": 0.9323583180987203,
+        "tn": 21,
+        "accuracy": 0.76875,
+        "specificity": 0.3620689655172414
+      },
+      "object": {
+        "tp": 182,
+        "fp": 187,
+        "fn": 4,
+        "precision": 0.4932249322493225,
+        "recall": 0.978494623655914,
+        "f1": 0.6558558558558559,
+        "f2": 0.8176100628930819,
+        "duplicates": 0,
+        "f1_ci95_by_group": [
+          0.6083650190114068,
+          0.6986301369863014
+        ],
+        "recall_ci95_by_group": [
+          0.9655172413793104,
+          0.9947643979057592
+        ]
+      }
+    },
+    "fused:cnn": {
+      "frame": {
+        "tp": 102,
+        "fp": 2,
+        "fn": 0,
+        "precision": 0.9807692307692307,
+        "recall": 1.0,
+        "f1": 0.9902912621359222,
+        "f2": 0.9960937499999999,
+        "tn": 56,
+        "accuracy": 0.9875,
+        "specificity": 0.9655172413793104
+      },
+      "object": {
+        "tp": 182,
+        "fp": 15,
+        "fn": 4,
+        "precision": 0.9238578680203046,
+        "recall": 0.978494623655914,
+        "f1": 0.9503916449086163,
+        "f2": 0.9670563230605741,
+        "duplicates": 0,
+        "f1_ci95_by_group": [
+          0.8933002481389578,
+          0.9887640449438202
+        ],
+        "recall_ci95_by_group": [
+          0.9655172413793104,
+          0.9947643979057592
+        ]
+      }
+    },
+    "fused:cnn:no_bypass": {
+      "frame": {
+        "tp": 101,
+        "fp": 2,
+        "fn": 1,
+        "precision": 0.9805825242718447,
+        "recall": 0.9901960784313726,
+        "f1": 0.9853658536585367,
+        "f2": 0.9882583170254403,
+        "tn": 56,
+        "accuracy": 0.98125,
+        "specificity": 0.9655172413793104
+      },
+      "object": {
+        "tp": 182,
+        "fp": 14,
+        "fn": 4,
+        "precision": 0.9285714285714286,
+        "recall": 0.978494623655914,
+        "f1": 0.9528795811518325,
+        "f2": 0.9680851063829788,
+        "duplicates": 0,
+        "f1_ci95_by_group": [
+          0.9,
+          0.9887640449438202
+        ],
+        "recall_ci95_by_group": [
+          0.9655172413793104,
+          0.9947643979057592
+        ]
+      }
+    }
+  },
+  "latency_ms_per_frame": {
+    "threshold": 1.651634676818503,
+    "fused:cnn": 2.565979711653199
+  },
+  "bypass": {
+    "trigger_c": 495.0,
+    "saturation_c": 550.0,
+    "min_hot_px": 3,
+    "by_classifier": {
+      "cnn": {
+        "saturated": {
+          "fired": 37,
+          "on_non_fire": 0
+        },
+        "oversize": {
+          "fired": 29,
+          "on_non_fire": 0
+        }
+      }
+    }
+  },
+  "scale_normalized_frames": 160,
+  "patch": {
+    "n": 369,
+    "positives": 189,
+    "threshold": {
+      "tp": 186,
+      "fp": 26,
+      "fn": 3,
+      "precision": 0.8773584905660378,
+      "recall": 0.9841269841269841,
+      "f1": 0.9276807980049875,
+      "f2": 0.9607438016528927,
+      "tn": 154,
+      "accuracy": 0.9214092140921409,
+      "specificity": 0.8555555555555555,
+      "ap": 0.9953325643042544,
+      "roc_auc": 0.9933862433862434,
+      "threshold": 60.0
+    },
+    "cnn": {
+      "tp": 186,
+      "fp": 10,
+      "fn": 3,
+      "precision": 0.9489795918367347,
+      "recall": 0.9841269841269841,
+      "f1": 0.9662337662337662,
+      "f2": 0.976890756302521,
+      "tn": 170,
+      "accuracy": 0.964769647696477,
+      "specificity": 0.9444444444444444,
+      "ap": 0.9687811473573181,
+      "roc_auc": 0.989241622574956,
+      "threshold": 0.7469055652618408
+    }
+  },
+  "label": "synthetic night test flights, FLAME 3 composite model",
+  "manifest": "exclude/data/synth/manifest_split.csv",
+  "split": "test",
+  "models": {
+    "cnn": {
+      "model_kind": "cnn",
+      "architecture": "TinyFireNet",
+      "width": 16,
+      "patch_spec": {
+        "version": "2",
+        "size_px": 32,
+        "ground_size_m": 2.3,
+        "abs_min_c": -20.0,
+        "abs_max_c": 600.0,
+        "contrast_scale_c": 50.0,
+        "border_px": 3,
+        "channels": 2
+      },
+      "input_name": "patches",
+      "output": "logits (apply sigmoid)",
+      "scale_normalized": true,
+      "threshold": 0.7469055652618408,
+      "threshold_rule": "recall>=0.95 then max precision (pooled OOF)",
+      "confirm_threshold": 0.903910219669342,
+      "reject_threshold": 0.21462605893611908,
+      "reject_threshold_rule": "recall>=0.99 (pooled OOF): below this a close-range candidate is FALSE_POSITIVE",
+      "confirm_threshold_rule": "precision>=0.98 then max recall (pooled OOF, single patch)",
+      "bypass_check": {
+        "trigger_c": 495.0,
+        "saturation_c": 550.0,
+        "n_negatives": 6934,
+        "neg_peak_p99_c": 46.75769805908203,
+        "neg_peak_p999_c": 85.17298889160156,
+        "neg_peak_max_c": 88.51853942871094,
+        "negatives_that_would_bypass": 0
+      },
+      "cv_summary": {
+        "precision": {
+          "mean": 0.9833281192671119,
+          "std": 0.01592122822210201,
+          "n": 5
+        },
+        "recall": {
+          "mean": 0.9552842530018152,
+          "std": 0.02865543182389232,
+          "n": 5
+        },
+        "f1": {
+          "mean": 0.9689064833813317,
+          "std": 0.01903953303235734,
+          "n": 5
+        },
+        "f2": {
+          "mean": 0.9606424189218364,
+          "std": 0.024519529577593832,
+          "n": 5
+        },
+        "accuracy": {
+          "mean": 0.9879876166108554,
+          "std": 0.003628128968337504,
+          "n": 5
+        },
+        "ap": {
+          "mean": 0.9894510215257741,
+          "std": 0.016305755827321265,
+          "n": 5
+        },
+        "roc_auc": {
+          "mean": 0.9973157168021485,
+          "std": 0.003081728906098471,
+          "n": 5
+        }
+      },
+      "patch_stats": {
+        "frames": 324,
+        "frames_skipped_ambiguous": 0,
+        "patches": 8042,
+        "positives": 1108,
+        "negatives": 6934,
+        "groups": 10,
+        "by_origin": {
+          "proposal": 6970,
+          "gt_center": 748,
+          "random_bg": 324
+        },
+        "proposal_positives": 360,
+        "proposal_negatives_hard": 6610,
+        "scale_normalized": true
+      },
+      "manifest": "exclude/data/flame3_composite/manifest_split.csv",
+      "tag": "flame3_composite",
+      "epochs": 20,
+      "seed": 0,
+      "onnx_parity_max_abs": 2.6702880859375e-05,
+      "created": "2026-11-07T19:50:59",
+      "torch": "2.15.0"
+    }
+  }
+}
