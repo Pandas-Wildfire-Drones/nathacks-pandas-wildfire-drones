@@ -1,0 +1,93 @@
+{
+  "model_kind": "cnn",
+  "architecture": "TinyFireNet",
+  "width": 16,
+  "patch_spec": {
+    "version": "2",
+    "size_px": 32,
+    "ground_size_m": 2.3,
+    "abs_min_c": -20.0,
+    "abs_max_c": 600.0,
+    "contrast_scale_c": 50.0,
+    "border_px": 3,
+    "channels": 2
+  },
+  "input_name": "patches",
+  "output": "logits (apply sigmoid)",
+  "scale_normalized": true,
+  "threshold": 0.9551178216934204,
+  "threshold_rule": "recall>=0.95 then max precision (pooled OOF)",
+  "confirm_threshold": 0.9551178216934204,
+  "reject_threshold": 0.09123726189136505,
+  "reject_threshold_rule": "recall>=0.99 (pooled OOF): below this a close-range candidate is FALSE_POSITIVE",
+  "confirm_threshold_rule": "precision>=0.98 then max recall (pooled OOF, single patch)",
+  "bypass_check": {
+    "trigger_c": 495.0,
+    "saturation_c": 550.0,
+    "n_negatives": 1084,
+    "neg_peak_p99_c": 86.57274627685547,
+    "neg_peak_p999_c": 89.66278839111328,
+    "neg_peak_max_c": 284.6043395996094,
+    "negatives_that_would_bypass": 0
+  },
+  "cv_summary": {
+    "precision": {
+      "mean": 0.9978311408685452,
+      "std": 0.002714890938467829,
+      "n": 5
+    },
+    "recall": {
+      "mean": 0.9694349036601764,
+      "std": 0.011081899533241677,
+      "n": 5
+    },
+    "f1": {
+      "mean": 0.9834034046009187,
+      "std": 0.0066188007279469096,
+      "n": 5
+    },
+    "f2": {
+      "mean": 0.9749687573088913,
+      "std": 0.009308583536426263,
+      "n": 5
+    },
+    "accuracy": {
+      "mean": 0.9794790352841961,
+      "std": 0.007709269383807915,
+      "n": 5
+    },
+    "ap": {
+      "mean": 0.998066205851839,
+      "std": 0.002903133586421792,
+      "n": 5
+    },
+    "roc_auc": {
+      "mean": 0.9958021061858441,
+      "std": 0.006677896456490367,
+      "n": 5
+    }
+  },
+  "patch_stats": {
+    "frames": 480,
+    "frames_skipped_ambiguous": 0,
+    "patches": 2937,
+    "positives": 1853,
+    "negatives": 1084,
+    "groups": 12,
+    "by_origin": {
+      "proposal": 1223,
+      "gt_center": 1234,
+      "random_bg": 480
+    },
+    "proposal_positives": 619,
+    "proposal_negatives_hard": 604,
+    "scale_normalized": true
+  },
+  "manifest": "exclude/data/synth/manifest_split.csv",
+  "tag": "synth",
+  "epochs": 15,
+  "seed": 0,
+  "onnx_parity_max_abs": 2.47955322265625e-05,
+  "created": "2026-11-07T16:26:32",
+  "torch": "2.15.0"
+}
