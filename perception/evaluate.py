@@ -24,11 +24,11 @@ from pathlib import Path
 
 import numpy as np
 
-from .datasets import FrameRecord, frame_label, load_frame, load_manifest, load_mask
+from .datasets import FrameRecord, frame_label, load_frame, load_ignore, load_manifest, load_mask
 from .detectors import FusedDetector, HotBypassRule, ThresholdDetector, load_classifier
 from .evaluation import (
-    average_precision, binary_metrics, blob_label, bootstrap_ci, gt_objects_from_mask, match_detections, metrics_from_counts,
-    roc_auc,
+    BLOB_IGNORE, average_precision, binary_metrics, blob_label, bootstrap_ci, drop_ignored, gt_objects_from_mask,
+    match_detections, metrics_from_counts, roc_auc,
 )
 from .results_doc import fmt_metric_table, update_section
 
@@ -44,7 +44,8 @@ class _Acc:
         self.frame_true: list[int] = []
         self.frame_pred: list[int] = []
 
-    def add(self, group, dets_uv, gts, frame_true):
+    def add(self, group, dets_uv, gts, frame_true, ignore=None):
+        dets_uv = drop_ignored(dets_uv, ignore)
         if gts is not None:
             m = match_detections(dets_uv, gts)
             c = self.obj[group]
@@ -87,6 +88,7 @@ def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object]
     for rec in records:
         temp = load_frame(rec)
         mask = load_mask(rec)
+        ignore = load_ignore(rec)
         gts = gt_objects_from_mask(mask) if mask is not None else None
         y_frame = frame_label(rec, mask)
 
@@ -94,13 +96,15 @@ def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object]
         blobs = proposer.blobs(temp)
         lat["threshold"].append(time.perf_counter() - t0)
         uv_all = [(b.u, b.v) for b in blobs]
-        acc["proposals"].add(rec.group, uv_all, gts, y_frame)
+        acc["proposals"].add(rec.group, uv_all, gts, y_frame, ignore)
         peaks = np.array([b.peak_temp_c for b in blobs])
         abs_thr = proposer.params.abs_threshold_c
-        acc["threshold"].add(rec.group, [uv for uv, t in zip(uv_all, peaks) if t >= abs_thr], gts, y_frame)
+        acc["threshold"].add(rec.group, [uv for uv, t in zip(uv_all, peaks) if t >= abs_thr], gts, y_frame, ignore)
+        blabs = np.array([blob_label(b.bbox, mask, ignore=ignore) for b in blobs]) if mask is not None else None
+        keep = blabs != BLOB_IGNORE if blabs is not None else None
         if mask is not None:
-            patch_y.extend(blob_label(b.bbox, mask) for b in blobs)
-            patch_scores["threshold"].extend(peaks.tolist())
+            patch_y.extend(blabs[keep].tolist())
+            patch_scores["threshold"].extend(peaks[keep].tolist() if len(blobs) else [])
 
         rows = rec.gsd_rows(temp.shape[0]) if rec.has_geometry else None
         gsd = (lambda v, g=rows[0]: float(g[min(max(int(v), 0), len(g) - 1)])) if rows is not None else rec.gsd_m
@@ -109,17 +113,17 @@ def evaluate_pipeline(records: list[FrameRecord], classifiers: dict[str, object]
             _, probs = det.score_blobs(temp, gsd)
             dets = det.decide(temp, blobs, probs, gsd, saturation_c=rec.saturation_c)
             lat[f"fused:{name}"].append(time.perf_counter() - t0)
-            acc[f"fused:{name}"].add(rec.group, [(d.u, d.v) for d in dets], gts, y_frame)
+            acc[f"fused:{name}"].add(rec.group, [(d.u, d.v) for d in dets], gts, y_frame, ignore)
             for b, why in zip(blobs, det.last_bypass_reasons):
                 if why in ("saturated", "oversize"):
                     bs = bypass_stats[name][why]
                     bs["fired"] += 1
-                    if mask is not None and not blob_label(b.bbox, mask):
+                    if mask is not None and blob_label(b.bbox, mask, ignore=ignore) == 0:
                         bs["on_non_fire"] += 1
             nb = fused_nobypass[name].decide(temp, blobs, probs, gsd)
-            acc[f"fused:{name}:no_bypass"].add(rec.group, [(d.u, d.v) for d in nb], gts, y_frame)
+            acc[f"fused:{name}:no_bypass"].add(rec.group, [(d.u, d.v) for d in nb], gts, y_frame, ignore)
             if mask is not None:
-                patch_scores[name].extend(np.asarray(probs).tolist())
+                patch_scores[name].extend(np.asarray(probs)[keep].tolist() if len(blobs) else [])
 
     results = {"n_frames": len(records), "n_groups": len({r.group for r in records}), "has_masks": has_masks,
                "variants": {k: a.result() for k, a in acc.items()},

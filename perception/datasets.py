@@ -38,8 +38,13 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["FrameRecord", "load_manifest", "write_manifest", "load_frame", "load_mask", "assign_group_split",
-           "depression_rows"]
+__all__ = ["FrameRecord", "load_manifest", "write_manifest", "load_frame", "load_mask", "load_ignore", "MASK_IGNORE",
+           "assign_group_split", "depression_rows"]
+
+# Mask value meaning "unknown": excluded from training labels AND from scoring (neither fire nor background).
+# Used where labels come from rules that can't decide (e.g. FLAME 3 NADIR pixels heating ahead of the front).
+# Any other non-zero value is fire, so existing 0/1 and 0/255 masks keep their meaning.
+MASK_IGNORE = 2
 
 
 @dataclass(frozen=True)
@@ -158,13 +163,26 @@ def load_frame(rec: FrameRecord) -> np.ndarray:
     return a
 
 
-def load_mask(rec: FrameRecord) -> np.ndarray | None:
+def _raw_mask(rec: FrameRecord) -> np.ndarray | None:
     if not rec.has_mask:
         return None
     m = _read_array(rec.mask_path)
-    if m.ndim == 3:
-        m = m[..., 0]
-    return m > 0
+    return m[..., 0] if m.ndim == 3 else m
+
+
+def load_mask(rec: FrameRecord) -> np.ndarray | None:
+    """Boolean FIRE mask (MASK_IGNORE pixels are not fire)."""
+    m = _raw_mask(rec)
+    return None if m is None else (m > 0) & (m != MASK_IGNORE)
+
+
+def load_ignore(rec: FrameRecord) -> np.ndarray | None:
+    """Boolean 'unknown' mask, or None if the frame has no ignore pixels."""
+    m = _raw_mask(rec)
+    if m is None:
+        return None
+    ig = m == MASK_IGNORE
+    return ig if ig.any() else None
 
 
 def frame_label(rec: FrameRecord, mask: np.ndarray | None = None) -> int:

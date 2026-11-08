@@ -383,3 +383,111 @@ Budget at 9 Hz is 111 ms/frame on the Jetson (context.md 6.5).
 CPU latency per frame (ms, this machine): threshold 1.7, fused:cnn 2.6
 Budget at 9 Hz is 111 ms/frame on the Jetson (context.md 6.5).
 <!-- END:pipeline_test_synth_by_flame3_model -->
+
+<!-- BEGIN:compare_handlabels_DoqCA -->
+### Approach comparison: FLAME 3 Sycan hand labels (DoqCA, 80-200 °C, active+smoulder = fire) · composite CNN
+
+98 candidates (78 fire), 18 groups. Hot-blob bypass fired on 31.
+
+| approach | ROC AUC [95% CI, groups] | AP | search thr | precision | recall |
+|---|---|---|---|---|---|
+| algorithmic (peak °C) | 0.552 [0.406, 0.670] | 0.857 | 60.000 | 0.796 | 1.000 |
+| CNN alone (no bypass) | 0.437 [0.327, 0.565] | 0.801 | 0.747 | 0.786 | 0.846 |
+| full pipeline (CNN + bypass) | 0.440 [0.329, 0.574] | 0.802 | 0.747 | 0.798 | 0.910 |
+
+Triage (NOT_FIRE < low ≤ REVIEW < high ≤ FIRE):
+
+| approach | low | high | fires missed (NOT_FIRE) | review rate | FIRE precision | non-fires auto-FIRE |
+|---|---|---|---|---|---|---|
+| algorithmic (peak °C) | 60.000 | 150.000 | 0/78 (0.000) | 0.643 | 0.800 | 7/20 |
+| CNN alone (no bypass) | 0.215 | 0.904 | 5/78 (0.064) | 0.153 | 0.766 | 18/20 |
+| full pipeline (CNN + bypass) | 0.215 | 0.904 | 3/78 (0.038) | 0.173 | 0.766 | 18/20 |
+<!-- END:compare_handlabels_DoqCA -->
+
+**How to read the hand-label comparison (2026-11-08):**
+* 297 labelled, **199 unsure** (195 of them low-gain frames), so 98 are usable: 78 fire, only 20 not-fire from 9 groups. The CIs are wide.
+* **Nothing separates fire from not-fire in this band** (all AUC CIs include 0.5). Medians: not-fire 122 °C / 52 px vs fire 119–135 °C / 41–56 px.
+* The 20 negatives are physically suspect. A compact 100–180 °C spot can't be sun-heated grass, and several sit in smoke. "No fire visible in a daytime RGB photo" ≠ "no heat source". Treat this set mainly as a **recall** check until a second labeller confirms the negatives.
+* The recall check is a real finding: at the search threshold the full pipeline drops **7 of 78** (9 %) human-confirmed fires that peak-temperature-alone keeps (CNN without the bypass: 12 of 78).
+* Why: the composite training set has almost no hot non-fire examples (composite test split, 80–200 °C: 58 fire vs **3** non-fire), so the CNN learned "hot ⇒ fire" there. It still clearly beats the classical baseline **below 80 °C** (diluted small fires), where the threshold misses 29 of 37.
+* Re-run: `python -m training.compare handlabels ... --key compare_handlabels_<labeller>`; plots and sliders: `training/compare_approaches.ipynb`.
+
+<!-- BEGIN:compare_flame3_composite_test -->
+### Approach comparison: FLAME 3 composite test split · composite CNN
+
+2893 candidates (162 fire), 4 groups. Hot-blob bypass fired on 31.
+Proposer missed 7 of 168 fire objects entirely (no approach can recover those).
+
+| approach | ROC AUC [95% CI, groups] | AP | search thr | precision | recall |
+|---|---|---|---|---|---|
+| algorithmic (peak °C) | 0.985 [0.968, 0.996] | 0.930 | 60.000 | 0.893 | 0.821 |
+| CNN alone (no bypass) | 0.997 [0.993, 1.000] | 0.986 | 0.747 | 0.940 | 0.975 |
+| full pipeline (CNN + bypass) | 0.997 [0.993, 1.000] | 0.986 | 0.747 | 0.940 | 0.975 |
+
+Triage (NOT_FIRE < low ≤ REVIEW < high ≤ FIRE):
+
+| approach | low | high | fires missed (NOT_FIRE) | review rate | FIRE precision | non-fires auto-FIRE |
+|---|---|---|---|---|---|---|
+| algorithmic (peak °C) | 60.000 | 150.000 | 29/162 (0.179) | 0.020 | 1.000 | 0/2731 |
+| CNN alone (no bypass) | 0.215 | 0.904 | 1/162 (0.006) | 0.007 | 0.963 | 6/2731 |
+| full pipeline (CNN + bypass) | 0.215 | 0.904 | 1/162 (0.006) | 0.007 | 0.963 | 6/2731 |
+<!-- END:compare_flame3_composite_test -->
+
+<!-- BEGIN:cnn_cv_mix_v2 -->
+### CNN verifier (PRIMARY): 5-fold group CV · mix_v2
+
+Patch-level, on classical proposals + mask-centred positives. 24220 patches (13496 fire / 10724 not, 6945 hard negatives), 40 groups. Threshold rule: recall >= 0.95 then max precision; each fold's threshold is chosen on the other folds. Epochs 20, width 16, augment True.
+
+| | precision | recall | f1 | f2 | accuracy | ap | roc_auc |
+|---|---|---|---|---|---|---|---|
+| fold 0 (n=9004, pos=2411, thr=0.987) | 0.999 | 0.773 | 0.872 | 0.809 | 0.939 | 0.996 | 0.998 |
+| fold 1 (n=3389, pos=3098, thr=0.899) | 1.000 | 0.989 | 0.995 | 0.991 | 0.990 | 1.000 | 1.000 |
+| fold 2 (n=3798, pos=2612, thr=0.920) | 0.997 | 0.969 | 0.983 | 0.975 | 0.977 | 0.999 | 0.998 |
+| fold 3 (n=3913, pos=2637, thr=0.948) | 0.999 | 0.947 | 0.972 | 0.957 | 0.963 | 0.999 | 0.998 |
+| fold 4 (n=4116, pos=2738, thr=0.914) | 0.994 | 0.980 | 0.987 | 0.983 | 0.983 | 0.999 | 0.999 |
+| **mean ± std over folds** | 0.998 ± 0.002 | 0.932 ± 0.081 | 0.962 ± 0.046 | 0.943 ± 0.068 | 0.971 ± 0.018 | 0.999 ± 0.001 | 0.999 ± 0.001 |
+| pooled OOF @ final thr 0.935 | 0.998 | 0.953 | 0.975 | 0.962 | 0.973 | 0.999 | 0.999 |
+| pooled OOF @ 0.5 (reference) | 0.994 | 0.981 | 0.987 | 0.984 | 0.986 |  |  |
+| CONFIRM op. point @ 0.935 (precision >= 0.98) | 0.998 | 0.953 | 0.975 | 0.962 | 0.973 |  |  |
+
+Accuracy is shown for completeness only (class imbalance makes it misleading; see perception/evaluation.py).
+Patches scale-normalized by GSD: True.
+
+**Hot-blob bypass data check** (trigger 495 °C = 0.9 × saturation 550 °C): hottest non-fire patch 109.7 °C (p99.9 87.6 °C, patch centre); non-fire patches that could bypass the CNN (upper bound): **0** of 10724. The blob-based count on the test split is in the pipeline section.
+<!-- END:cnn_cv_mix_v2 -->
+
+<!-- BEGIN:matrix_mix_v2 -->
+### Models × test views (three approaches)
+
+| view | approach | composite (shipped)<br>roc_auc | composite (shipped)<br>precision | composite (shipped)<br>recall | composite (shipped)<br>f1 | composite (shipped)<br>missed | composite (shipped)<br>review | mix_v2<br>roc_auc | mix_v2<br>precision | mix_v2<br>recall | mix_v2<br>f1 | mix_v2<br>missed | mix_v2<br>review |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| nadir (n=3407, fire=1980) | algorithmic (peak °C) | 1.000 | 0.990 | 1.000 | 0.995 | 0.000 | 0.176 | 1.000 | 0.990 | 1.000 | 0.995 | 0.000 | 0.176 |
+|  | CNN alone | 0.956 | 0.968 | 0.726 | 0.830 | 0.113 | 0.178 | 1.000 | 0.999 | 0.997 | 0.998 | 0.000 | 0.026 |
+|  | full pipeline | 0.960 | 0.970 | 0.755 | 0.849 | 0.099 | 0.186 | 1.000 | 0.999 | 0.997 | 0.998 | 0.000 | 0.026 |
+| handlabels (n=98, fire=78) | algorithmic (peak °C) | 0.552 | 0.796 | 1.000 | 0.886 | 0.000 | 0.643 | 0.552 | 0.796 | 1.000 | 0.886 | 0.000 | 0.643 |
+|  | CNN alone | 0.437 | 0.786 | 0.846 | 0.815 | 0.064 | 0.153 | 0.424 | 0.789 | 0.910 | 0.845 | 0.000 | 0.082 |
+|  | full pipeline | 0.440 | 0.798 | 0.910 | 0.850 | 0.038 | 0.173 | 0.424 | 0.793 | 0.936 | 0.859 | 0.000 | 0.082 |
+| composite (n=2893, fire=162) | algorithmic (peak °C) | 0.985 | 0.893 | 0.821 | 0.855 | 0.179 | 0.020 | 0.985 | 0.893 | 0.821 | 0.855 | 0.179 | 0.020 |
+|  | CNN alone | 0.997 | 0.940 | 0.975 | 0.958 | 0.006 | 0.007 | 0.995 | 0.987 | 0.932 | 0.959 | 0.006 | 0.008 |
+|  | full pipeline | 0.997 | 0.940 | 0.975 | 0.958 | 0.006 | 0.007 | 0.995 | 0.987 | 0.932 | 0.959 | 0.006 | 0.008 |
+| cvsubset (n=4670, fire=3776) | algorithmic (peak °C) | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.002 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.002 |
+|  | CNN alone | 0.997 | 1.000 | 0.872 | 0.932 | 0.051 | 0.113 | 1.000 | 1.000 | 0.974 | 0.987 | 0.005 | 0.017 |
+|  | full pipeline | 1.000 | 1.000 | 0.998 | 0.999 | 0.002 | 0.152 | 1.000 | 1.000 | 0.998 | 0.999 | 0.000 | 0.021 |
+| all_with_hand (n=10915, fire=5984) | algorithmic (peak °C) | 0.998 | 0.991 | 0.995 | 0.993 | 0.005 | 0.066 | 0.998 | 0.991 | 0.995 | 0.993 | 0.005 | 0.066 |
+|  | CNN alone | 0.986 | 0.986 | 0.826 | 0.899 | 0.071 | 0.104 | 0.998 | 0.996 | 0.980 | 0.988 | 0.003 | 0.018 |
+|  | full pipeline | 0.990 | 0.987 | 0.916 | 0.950 | 0.035 | 0.124 | 0.998 | 0.996 | 0.995 | 0.996 | 0.000 | 0.019 |
+| all_no_hand (n=10817, fire=5906) | algorithmic (peak °C) | 0.999 | 0.994 | 0.995 | 0.995 | 0.005 | 0.061 | 0.999 | 0.994 | 0.995 | 0.995 | 0.005 | 0.061 |
+|  | CNN alone | 0.988 | 0.989 | 0.826 | 0.900 | 0.071 | 0.104 | 1.000 | 0.999 | 0.981 | 0.990 | 0.003 | 0.017 |
+|  | full pipeline | 0.992 | 0.990 | 0.916 | 0.952 | 0.035 | 0.123 | 1.000 | 0.999 | 0.996 | 0.998 | 0.000 | 0.019 |
+| nadir_proposals (n=2570, fire=2544) | algorithmic (peak °C) | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.572 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.572 |
+|  | CNN alone | 0.834 | 0.999 | 0.623 | 0.768 | 0.208 | 0.244 | 0.990 | 1.000 | 0.941 | 0.970 | 0.008 | 0.051 |
+|  | full pipeline | 0.862 | 0.999 | 0.717 | 0.835 | 0.168 | 0.283 | 0.992 | 1.000 | 0.961 | 0.980 | 0.001 | 0.058 |
+<!-- END:matrix_mix_v2 -->
+
+**How to read the matrix (2026-11-08):**
+* `mix_v2` = NADIR plot 2 (labels from each pixel's history) + composites + Sycan weak labels, plus hard examples drawn from the masks (`training/patch_data.py`). Thresholds come from pooled out-of-fold scores only; no test view was used for tuning.
+* **Real fire it used to drop, it now keeps.** NADIR plot 1 (a plot it never saw): CNN recall 0.73 → 0.997 at the search threshold. Sycan CV subset: 0.87 → 0.97. Pooled pipeline: fires sent to NOT_FIRE 3.5 % → 0 %, REVIEW load 12 % → 2 %.
+* **Composite / night synthetic:** discrimination is unchanged (AUC 0.995–0.997, night 0.989 → 0.992). Recall at the search threshold dips (composite 0.975 → 0.932) because the new threshold is stricter (0.935 vs 0.747). Those fires land in REVIEW, not NOT_FIRE (composite fires missed: 1 for both models). Use `reject_threshold` (0.177) as the keep cut once the search REVIEW band exists (#13).
+* `nadir` and `cvsubset` separate on temperature **by construction**: their labels only cover clear cases, and the hard ones are ignored. So algorithmic = 1.0 there, and those views test whether the CNN drops real fire or calls warm char/rocks fire. Don't cite them as evidence of discrimination in the hard band.
+* `handlabels` is unchanged (AUC ~0.42–0.55 for every approach), and that's expected: nothing in any training set looks like the 20 "not fire" blobs at 80–200 °C, which are probably real heat (#19). Pipeline recall on your labelled fires: 0.91 → 0.94, with 0 sent to NOT_FIRE.
+* Re-run: `python -m training.eval_sets --model "name=path.onnx" ... --key matrix_<tag>`; plots and sliders: `training/compare_approaches.ipynb`.

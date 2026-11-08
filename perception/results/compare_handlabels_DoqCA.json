@@ -1,0 +1,253 @@
+{
+  "source": "handlabels:labels_DoqCA",
+  "n": 98,
+  "n_fire": 78,
+  "n_groups": 18,
+  "bypass_fired": 31,
+  "n_objects": 0,
+  "missed_objects": 0,
+  "approaches": {
+    "algorithmic": {
+      "roc_auc": 0.5522435897435898,
+      "roc_auc_ci95": [
+        0.40631224179169384,
+        0.6698789157714183
+      ],
+      "ap": 0.8574616483515911,
+      "search_threshold": 60.0,
+      "search": {
+        "tp": 78,
+        "fp": 20,
+        "fn": 0,
+        "precision": 0.7959183673469388,
+        "recall": 1.0,
+        "f1": 0.8863636363636364,
+        "f2": 0.951219512195122,
+        "tn": 0,
+        "accuracy": 0.7959183673469388,
+        "specificity": 0.0
+      },
+      "triage": {
+        "bands": {
+          "not_fire_below": 60.0,
+          "fire_at_or_above": 150.0
+        },
+        "n": 98,
+        "n_fire": 78,
+        "n_not_fire": 20,
+        "counts": {
+          "FIRE": {
+            "fire": 28,
+            "not_fire": 7
+          },
+          "REVIEW": {
+            "fire": 50,
+            "not_fire": 13
+          },
+          "NOT_FIRE": {
+            "fire": 0,
+            "not_fire": 0
+          }
+        },
+        "missed_fire_rate": 0.0,
+        "fire_or_review_recall": 1.0,
+        "review_rate": 0.6428571428571429,
+        "fire_precision": 0.8,
+        "false_alarm_rate": 0.35,
+        "auto_accuracy": 0.8
+      }
+    },
+    "model": {
+      "roc_auc": 0.43653846153846154,
+      "roc_auc_ci95": [
+        0.3266609062980031,
+        0.5654480068542568
+      ],
+      "ap": 0.8013431516185082,
+      "search_threshold": 0.7469055652618408,
+      "search": {
+        "tp": 66,
+        "fp": 18,
+        "fn": 12,
+        "precision": 0.7857142857142857,
+        "recall": 0.8461538461538461,
+        "f1": 0.8148148148148148,
+        "f2": 0.8333333333333333,
+        "tn": 2,
+        "accuracy": 0.6938775510204082,
+        "specificity": 0.1
+      },
+      "triage": {
+        "bands": {
+          "not_fire_below": 0.21462605893611908,
+          "fire_at_or_above": 0.903910219669342
+        },
+        "n": 98,
+        "n_fire": 78,
+        "n_not_fire": 20,
+        "counts": {
+          "FIRE": {
+            "fire": 59,
+            "not_fire": 18
+          },
+          "REVIEW": {
+            "fire": 14,
+            "not_fire": 1
+          },
+          "NOT_FIRE": {
+            "fire": 5,
+            "not_fire": 1
+          }
+        },
+        "missed_fire_rate": 0.0641025641025641,
+        "fire_or_review_recall": 0.9358974358974359,
+        "review_rate": 0.15306122448979592,
+        "fire_precision": 0.7662337662337663,
+        "false_alarm_rate": 0.9,
+        "auto_accuracy": 0.7228915662650602
+      }
+    },
+    "pipeline": {
+      "roc_auc": 0.43974358974358974,
+      "roc_auc_ci95": [
+        0.32946585691792696,
+        0.573668960612253
+      ],
+      "ap": 0.8019209484966989,
+      "search_threshold": 0.7469055652618408,
+      "search": {
+        "tp": 71,
+        "fp": 18,
+        "fn": 7,
+        "precision": 0.797752808988764,
+        "recall": 0.9102564102564102,
+        "f1": 0.8502994011976048,
+        "f2": 0.8852867830423939,
+        "tn": 2,
+        "accuracy": 0.7448979591836735,
+        "specificity": 0.1
+      },
+      "triage": {
+        "bands": {
+          "not_fire_below": 0.21462605893611908,
+          "fire_at_or_above": 0.903910219669342
+        },
+        "n": 98,
+        "n_fire": 78,
+        "n_not_fire": 20,
+        "counts": {
+          "FIRE": {
+            "fire": 59,
+            "not_fire": 18
+          },
+          "REVIEW": {
+            "fire": 16,
+            "not_fire": 1
+          },
+          "NOT_FIRE": {
+            "fire": 3,
+            "not_fire": 1
+          }
+        },
+        "missed_fire_rate": 0.038461538461538464,
+        "fire_or_review_recall": 0.9615384615384616,
+        "review_rate": 0.17346938775510204,
+        "fire_precision": 0.7662337662337663,
+        "false_alarm_rate": 0.9,
+        "auto_accuracy": 0.7407407407407407
+      }
+    }
+  },
+  "by_temp_band": {
+    "80-200C": {
+      "algorithmic": {
+        "bands": {
+          "not_fire_below": 60.0,
+          "fire_at_or_above": 150.0
+        },
+        "n": 98,
+        "n_fire": 78,
+        "n_not_fire": 20,
+        "counts": {
+          "FIRE": {
+            "fire": 28,
+            "not_fire": 7
+          },
+          "REVIEW": {
+            "fire": 50,
+            "not_fire": 13
+          },
+          "NOT_FIRE": {
+            "fire": 0,
+            "not_fire": 0
+          }
+        },
+        "missed_fire_rate": 0.0,
+        "fire_or_review_recall": 1.0,
+        "review_rate": 0.6428571428571429,
+        "fire_precision": 0.8,
+        "false_alarm_rate": 0.35,
+        "auto_accuracy": 0.8
+      },
+      "model": {
+        "bands": {
+          "not_fire_below": 0.21462605893611908,
+          "fire_at_or_above": 0.903910219669342
+        },
+        "n": 98,
+        "n_fire": 78,
+        "n_not_fire": 20,
+        "counts": {
+          "FIRE": {
+            "fire": 59,
+            "not_fire": 18
+          },
+          "REVIEW": {
+            "fire": 14,
+            "not_fire": 1
+          },
+          "NOT_FIRE": {
+            "fire": 5,
+            "not_fire": 1
+          }
+        },
+        "missed_fire_rate": 0.0641025641025641,
+        "fire_or_review_recall": 0.9358974358974359,
+        "review_rate": 0.15306122448979592,
+        "fire_precision": 0.7662337662337663,
+        "false_alarm_rate": 0.9,
+        "auto_accuracy": 0.7228915662650602
+      },
+      "pipeline": {
+        "bands": {
+          "not_fire_below": 0.21462605893611908,
+          "fire_at_or_above": 0.903910219669342
+        },
+        "n": 98,
+        "n_fire": 78,
+        "n_not_fire": 20,
+        "counts": {
+          "FIRE": {
+            "fire": 59,
+            "not_fire": 18
+          },
+          "REVIEW": {
+            "fire": 16,
+            "not_fire": 1
+          },
+          "NOT_FIRE": {
+            "fire": 3,
+            "not_fire": 1
+          }
+        },
+        "missed_fire_rate": 0.038461538461538464,
+        "fire_or_review_recall": 0.9615384615384616,
+        "review_rate": 0.17346938775510204,
+        "fire_precision": 0.7662337662337663,
+        "false_alarm_rate": 0.9,
+        "auto_accuracy": 0.7407407407407407
+      }
+    }
+  },
+  "model": "fire_cnn_flame3comp.onnx"
+}

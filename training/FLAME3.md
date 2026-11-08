@@ -81,3 +81,21 @@ Paper: https://arxiv.org/abs/2412.02831 (we read v2, 28 Jun 2026; local copy `ex
    - *Why not HIT-UAV / BIRDSAI ([S21]) for negatives?* Both release **8-bit** frames: HIT-UAV states "bit depth is 8", and BIRDSAI's real frames are `.jpg`. Neither carries °C, and our CNN's first channel is absolute temperature.
 5. **Real-fire test set for the hard band (optional):** `python -m training.label_tool` (candidates → label → agree). A person labels 80–200 °C blobs from the paired RGB photo: active / smouldering / not fire / unsure. Sycan has 12,762 unclipped in-band blobs in Fire frames (23 groups); the default draw is ~300 (≤ 15 per group). Blobs at the gain clip are skipped (`--include-clipped` keeps them). The RGB panel crops the 4000×3000 raw photo through `--rgb-box 0.1638 0.1511 0.8004 0.8289` (where the thermal FOV sits in the wide camera). About 200–300 blobs take 20–30 min. These labels are a **test set**, not training data. Scored in `training/train_verifier.ipynb` §7.
 6. **Group by burn.** The paper holds out whole burns (Willamette, Sycan) for testing. The Kaggle CV subset is a single burn, so the builder groups by day × 250 m ground cell. With only 14 No-Fire groups, CV and test estimates on composites stay noisy.
+
+## NADIR thermal plot subset (Hanna Hammock): what we use and how it's labelled
+
+**Cite as well:** B. Hopkins, L. O'Neill, M. Marinaccio, F. Afghah, E. Rowell, and R. Parsons, "FLAME 3 - NADIR thermal fire image dataset," 2024. [Online]. Available: https://www.kaggle.com/dsv/8724543 (paper ref. [2]).
+
+| | |
+|---|---|
+| Burn | Hanna Hammock, Tall Timbers, Florida, 26-28 Feb 2023 (longleaf pine); README: image timestamps are 4 h behind, so frames are afternoon (daylight) |
+| Camera | Autel EVO II Dual 640T (XT709), 640×512, 13 mm, nadir, north-up, ~122 m AGL, one frame every 3-5 s; low gain 0-550 °C, high gain clips at ~197 °C (measured; plot 1's first 26 frames) |
+| Thermal data | `raw_thermal_tiff` = int16 counts, `°C = DN × 0.1 − 275` (README); `geo_thermal_tiff_celsius` = °C, stabilized (ECC affine) and georeferenced, **one map grid per stack**, NAD83 / UTM 16N, LZW (needs `imagecodecs`), nodata = 0 |
+| Stacks | plot 1: 296 frames (GSD 0.157 m) · plot 2 part 1: 322 (0.129 m) · plot 2 part 2: 176 (0.133 m), parts separated by a 9 min landing |
+| Not thermal | pre/post-burn folders (RGB, orthos, point clouds) and plot 3 (RGB only) |
+
+**Download** (thermal only, ~1 GB of the 35 GB zip): `set -a; . ./.env; set +a; python -m training.download_flame3_nadir`. One API call gets a signed URL; members are read with HTTP Range requests (per-file Kaggle API calls hit HTTP 429 after a few dozen files).
+
+**Labels from history** (`python -m training.build_nadir`): per pixel, peak, time of peak and post-peak floor; per frame, fire = ≥ 120 °C or burned and ≥ 25 °C above its floor (residual heat); not fire = never above 60 °C and < 50 °C now (unburned), or burned, settled, within 8 °C of a floor near the char plateau (~43-45 °C; burnt out); everything else = ignore (mask value 2). Plot 1 = test, plot 2 = train. Thresholds are `[ASSUMPTION]` CLI options. Limits: daylight (warmer background than night), a prescribed surface fire, and only the clear cases get labels (the ignore band is where the hard cases are).
+
+**Sycan weak masks** (`python -m training.build_sycan_weak`): No-Fire frame = not fire; Fire-frame pixel ≥ min(200 °C, gain clip − 0.5) = fire; rest of a Fire frame = ignore. Frames with a hand-labelled candidate are never trained on.
