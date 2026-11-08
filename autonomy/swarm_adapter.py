@@ -9,15 +9,30 @@ local execution safety.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
+from autonomy.cbs_planner import PathRequest
 from autonomy.deconfliction import Conflict, detect_conflicts
 from autonomy.drone_controller import DroneController, MissionExecutionResult
 from autonomy.health_manager import evaluate_drone_health
-from contracts.entities import Alert, DroneState, Hotspot, Task
-from contracts.geometry import Position
-from contracts.enums import AlertKind, MessageType, Severity, TaskStatus, TaskType
+from autonomy.local_replanner import replan_conflict_groups
+from autonomy.mission_coordinator import (
+    MissionCoordinator,
+    MissionPlan,
+    MissionPlanningContext,
+)
 from autonomy.path_claim_manager import PathClaimManager
+from contracts.entities import Alert, DroneState, Hotspot, Task
+from contracts.geometry import GridSpec, Position
+from contracts.enums import (
+    AlertKind,
+    DroneKind,
+    HotspotStatus,
+    MessageType,
+    Severity,
+    TaskStatus,
+    TaskType,
+)
 from contracts.messages import (
     AlertNotice,
     Heartbeat,
@@ -60,10 +75,20 @@ class SwarmAutonomyAdapter:
         drone: DroneState,
         controller: DroneController,
         bus: Any,
+        *,
+        planning_context: MissionPlanningContext | None = None,
+        altitude_agl_provider: Callable[[DroneState], float] | None = None,
     ) -> None:
         self.drone = drone
         self.controller = controller
         self.bus = bus
+        self.planning_context = planning_context
+        self.altitude_agl_provider = altitude_agl_provider
+        self.path_claim_manager = PathClaimManager(bus)
+        self.mission_coordinator = MissionCoordinator(
+            drone,
+            self.path_claim_manager,
+        )
 
         # The adapter receives time through the DroneState contract.
         self.now = drone.timestamp
@@ -92,6 +117,7 @@ class SwarmAutonomyAdapter:
     ) -> MissionExecutionResult | None:
         """Dispatch one swarm message to the appropriate local handler."""
 
+        self.now = max(self.now, self.drone.timestamp, message.timestamp)
         body = message.body
 
         if isinstance(body, TaskAssign):
@@ -144,6 +170,16 @@ class SwarmAutonomyAdapter:
             )
             return None
 
+        if (
+            message.epoch is not None
+            and message.epoch != self.drone.epoch
+        ):
+            self._publish_alert(
+                message,
+                "Rejected task assignment with stale message epoch",
+            )
+            return None
+
         # The task itself also carries an epoch. Both must agree with
         # the drone's currently accepted leader epoch.
         if task.epoch != self.drone.epoch:
@@ -164,9 +200,15 @@ class SwarmAutonomyAdapter:
             )
             return None
 
-        self.state.current_task = task
-
         if task.type is not TaskType.EXTINGUISH:
+            self.state.current_task = task
+            return None
+
+        if self.state.current_task is not None:
+            self._publish_alert(
+                message,
+                "Rejected task because another mission is already active",
+            )
             return None
 
         hotspot = self._find_hotspot(task.target_hotspot_id)
@@ -178,8 +220,6 @@ class SwarmAutonomyAdapter:
                 "Extinguish task received before target hotspot was known",
             )
             return None
-
-        self.state.current_hotspot = hotspot
 
         # The leader may allocate the hotspot, but local autonomy still
         # refuses an explicit assignment to another drone.
@@ -193,19 +233,116 @@ class SwarmAutonomyAdapter:
             )
             return None
 
+        if hotspot.status not in (
+            HotspotStatus.CONFIRMED,
+            HotspotStatus.ASSIGNED,
+        ):
+            self._publish_alert(
+                message,
+                "Hotspot is not confirmed for extinguishing",
+            )
+            return None
+
+        if self.drone.kind is not DroneKind.EXTINGUISHER:
+            self._publish_alert(
+                message,
+                "Rejected extinguish task for a non-extinguisher drone",
+            )
+            return None
+
+        health = evaluate_drone_health(self.drone)
+        if not health.safe:
+            autopilot = self.controller.autopilot
+            if autopilot is not None:
+                if health.action == "RETURN":
+                    autopilot.return_to_launch()
+                else:
+                    autopilot.hold()
+
+            self._publish_alert(
+                message,
+                f"Autonomy blocked mission: {health.reason}",
+            )
+            return None
+
+        if not self.controller.ready_for_mission:
+            self._publish_alert(
+                message,
+                "Rejected task because controller is not ready "
+                "to start a mission",
+            )
+            return None
+
+        context = self.planning_context
+        if context is None:
+            self._publish_alert(
+                message,
+                "Rejected extinguish task because mission planning "
+                "configuration is unavailable",
+            )
+            return None
+
         try:
-            return self.controller.begin_extinguish(
+            planning = self.mission_coordinator.plan_task(
+                task,
+                hotspot,
+                context,
+                start_time=self.now,
+            )
+        except ValueError as exc:
+            self._publish_alert(
+                message,
+                f"Mission planning failed: {exc}",
+            )
+            return None
+        if not planning.accepted or planning.plan is None:
+            self._publish_alert(message, planning.reason)
+            return None
+
+        try:
+            claim_message = self.mission_coordinator.publish_plan(
+                planning.plan,
+                other_claims=self.state.remote_path_claims,
+                minimum_separation_m=context.minimum_separation_m,
+                valid_from=self.now,
+                altitude_band_m=context.altitude_band_m,
+            )
+        except (ValueError, RuntimeError) as exc:
+            self._publish_alert(
+                message,
+                f"Path claim publication failed: {exc}",
+            )
+            return None
+
+        if claim_message is None:
+            self._publish_alert(
+                message,
+                "Rejected planned path because it conflicts "
+                "with an active remote path claim",
+            )
+            return None
+
+        try:
+            result = self.controller.begin_extinguish(
                 self.drone,
                 hotspot,
                 task,
+                cruise_speed_mps=context.platform_spec.cruise_speed_mps,
             )
         except (ValueError, RuntimeError) as exc:
             self._publish_alert(message, str(exc))
             return None
 
+        if result is not None and result.status == "TRANSIT" and result.success:
+            self.state.current_task = task
+            self.state.current_hotspot = hotspot
+
+        return result
+
     def step(self) -> MissionExecutionResult | None:
         """Advance the currently assigned local mission by one control step."""
 
+        self.now = max(self.now, self.drone.timestamp)
         task = self.state.current_task
         hotspot = self.state.current_hotspot
 
@@ -232,10 +369,19 @@ class SwarmAutonomyAdapter:
         if task.type is not TaskType.EXTINGUISH:
             return None
 
-        # DroneState.position.z is the local altitude reference used by
-        # the existing contract. The controller's drop limits are applied
-        # immediately before release.
-        altitude_agl_m = max(0.0, float(self.drone.position.z))
+        # Position.z is height above the scenario datum, not AGL. Without
+        # an environment-provided conversion, release must remain blocked.
+        if self.altitude_agl_provider is None:
+            if self.controller.autopilot is not None:
+                self.controller.autopilot.hold()
+            self._publish_alert(
+                None,
+                "Water release blocked because altitude above ground "
+                "is unavailable",
+            )
+            return None
+
+        altitude_agl_m = self.altitude_agl_provider(self.drone)
 
         result = self.controller.step_extinguish(
             self.drone,
@@ -246,6 +392,8 @@ class SwarmAutonomyAdapter:
 
         if result.status in ("DONE", "FAILED", "REJECTED"):
             self._publish_task_complete(task, result)
+            self.state.current_task = None
+            self.state.current_hotspot = None
 
         return result
 
@@ -253,6 +401,10 @@ class SwarmAutonomyAdapter:
         self,
         proposed_path: list,
         minimum_separation_m: float,
+        *,
+        valid_from: float | None = None,
+        time_step_s: float | None = None,
+        altitude_band_m: tuple[float, float] | None = None,
     ) -> list[Conflict]:
         """Check a proposed local path against active remote path claims.
 
@@ -260,11 +412,29 @@ class SwarmAutonomyAdapter:
         local health, mission, or resource safety.
         """
 
-        other_paths = [
-            claim.waypoints
-            for claim in self.state.remote_path_claims
-            if self._claim_is_current(claim)
-        ]
+        route_start = self.now if valid_from is None else valid_from
+        route_step = time_step_s or 1.0
+        route_end = route_start + max(
+            1,
+            len(proposed_path) - 1,
+        ) * route_step
+        other_paths = []
+        for claim in self.state.remote_path_claims:
+            if (
+                claim.valid_until < route_start
+                or claim.valid_from > route_end
+            ):
+                continue
+            if (
+                altitude_band_m is not None
+                and claim.altitude_band_m is not None
+                and (
+                    altitude_band_m[0] >= claim.altitude_band_m[1]
+                    or claim.altitude_band_m[0] >= altitude_band_m[1]
+                )
+            ):
+                continue
+            other_paths.append(claim.waypoints)
 
         return detect_conflicts(
             proposed_path,
@@ -284,12 +454,26 @@ class SwarmAutonomyAdapter:
     ) -> SwarmMessage | None:
         """Publish a planned route only when active claims permit it."""
 
-        conflicts = self.check_path_conflicts(
-            waypoints,
-            minimum_separation_m,
+        plan = MissionPlan(
+            task_id="planned-path",
+            drone_id=self.drone.drone_id,
+            waypoints=waypoints,
+            duration_s=(len(waypoints) - 1) * time_step_s,
+            time_step_s=time_step_s,
+            water_required_l=0.0,
         )
-
-        if conflicts:
+        coordinator = MissionCoordinator(
+            self.drone,
+            path_claim_manager,
+        )
+        message = coordinator.publish_plan(
+            plan,
+            other_claims=self.state.remote_path_claims,
+            minimum_separation_m=minimum_separation_m,
+            valid_from=valid_from,
+            altitude_band_m=altitude_band_m,
+        )
+        if message is None:
             self._publish_alert(
                 None,
                 (
@@ -299,13 +483,40 @@ class SwarmAutonomyAdapter:
             )
             return None
 
-        return path_claim_manager.publish_from_planned_path(
-            self.drone,
-            waypoints,
-            valid_from=valid_from,
+        return message
+
+    def replan_conflicting_groups(
+        self,
+        requests: list[PathRequest],
+        existing_routes: dict[str, list[Position]],
+        occupancy_grid: list[list[int]],
+        grid_spec: GridSpec,
+        *,
+        minimum_separation_m: float,
+        conflict_group_threshold_m: float,
+        time_step_s: float = 0.1,
+        max_cbs_nodes: int = 100,
+        max_timesteps: int = 500,
+    ) -> dict[str, list[Position]] | None:
+        """Delegate invalidated route groups to the existing local replanner."""
+
+        routes = replan_conflict_groups(
+            requests,
+            existing_routes,
+            occupancy_grid,
+            grid_spec,
+            minimum_separation_m=minimum_separation_m,
+            conflict_group_threshold_m=conflict_group_threshold_m,
             time_step_s=time_step_s,
-            altitude_band_m=altitude_band_m,
+            max_cbs_nodes=max_cbs_nodes,
+            max_timesteps=max_timesteps,
         )
+        if routes is None:
+            self._publish_alert(
+                None,
+                "Local replanning failed for a conflicting route group",
+            )
+        return routes
 
     def handle_heartbeat(
         self,
@@ -363,11 +574,6 @@ class SwarmAutonomyAdapter:
             if existing.drone_id != claim.drone_id
         ]
         self.state.remote_path_claims.append(claim)
-
-    def _claim_is_current(self, claim: PathClaim) -> bool:
-        """Return whether a remote claim overlaps the adapter's current time."""
-
-        return claim.valid_from <= self.now <= claim.valid_until
 
     def _find_hotspot(self, hotspot_id: str | None) -> Hotspot | None:
         if hotspot_id is None:

@@ -39,6 +39,10 @@ class FakeController:
         self.autopilot = None
         self.begin_calls = []
 
+    @property
+    def ready_for_mission(self):
+        return True
+
     def begin_extinguish(self, drone, hotspot, task):
         self.begin_calls.append((drone, hotspot, task))
         return None

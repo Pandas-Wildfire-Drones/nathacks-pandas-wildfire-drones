@@ -283,7 +283,12 @@ def test_healthy_drone_can_continue_to_controller():
     )
 
     drone = make_drone()
-    adapter = SwarmAutonomyAdapter(drone, controller, FakeBus())
+    adapter = SwarmAutonomyAdapter(
+        drone,
+        controller,
+        FakeBus(),
+        altitude_agl_provider=lambda _drone: 20.0,
+    )
 
     task = make_task()
     hotspot = make_hotspot()

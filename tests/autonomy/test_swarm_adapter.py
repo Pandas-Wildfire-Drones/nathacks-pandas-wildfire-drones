@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from autonomy.mission_coordinator import MissionPlanningContext
 from autonomy.swarm_adapter import SwarmAutonomyAdapter
+from contracts.config import default_extinguisher_spec
 from contracts.entities import DroneState, Hotspot, Position, Task
 from contracts.enums import (
     AlertKind,
@@ -20,6 +22,7 @@ from contracts.enums import MessageType
 from contracts.messages import PathClaim
 from contracts.topics import ROUTES
 from contracts.messages import SwarmMessage, TaskAssign
+from contracts.geometry import GridSpec
 
 
 class FakeBus:
@@ -39,9 +42,14 @@ class FakeController:
         self.autopilot = SimpleNamespace(
             hold_calls=0,
         )
+        self.payload = object()
         self.autopilot.hold = self._hold
         self.begin_calls = []
         self.step_calls = []
+
+    @property
+    def ready_for_mission(self):
+        return True
 
     def _hold(self):
         self.autopilot.hold_calls += 1
@@ -53,7 +61,7 @@ class FakeController:
 
         return MissionExecutionResult(
             status="TRANSIT",
-            success=False,
+            success=True,
             water_used_l=0.0,
             reason="Navigation requested",
         )
@@ -131,6 +139,23 @@ def make_message(body, epoch=2):
     )
 
 
+def make_planning_context():
+    grid_spec = GridSpec(
+        origin=Position(x=-0.5, y=-0.5, z=0),
+        resolution_m=1,
+        rows=32,
+        cols=32,
+    )
+    return MissionPlanningContext(
+        occupancy_grid=[[0] * 32 for _ in range(32)],
+        grid_spec=grid_spec,
+        base_position=Position(x=0, y=0, z=0),
+        platform_spec=default_extinguisher_spec(),
+        minimum_separation_m=1,
+        time_step_s=1,
+    )
+
+
 def test_adapter_subscribes_to_swarm_messages():
     bus = FakeBus()
     controller = FakeController()
@@ -144,7 +169,12 @@ def test_task_assign_for_this_drone_starts_mission():
     bus = FakeBus()
     controller = FakeController()
 
-    adapter = SwarmAutonomyAdapter(make_drone(), controller, bus)
+    adapter = SwarmAutonomyAdapter(
+        make_drone(),
+        controller,
+        bus,
+        planning_context=make_planning_context(),
+    )
     adapter.state.current_hotspot = make_hotspot()
 
     assignment = TaskAssign(
@@ -226,7 +256,12 @@ def test_step_publishes_task_completion():
     bus = FakeBus()
     controller = FakeController()
 
-    adapter = SwarmAutonomyAdapter(make_drone(), controller, bus)
+    adapter = SwarmAutonomyAdapter(
+        make_drone(),
+        controller,
+        bus,
+        altitude_agl_provider=lambda _drone: 20.0,
+    )
     adapter.state.current_task = make_task()
     adapter.state.current_hotspot = make_hotspot()
 

@@ -52,6 +52,16 @@ class DroneController:
         self._active_task_id: str | None = None
         self._terminal_result: MissionExecutionResult | None = None
 
+    @property
+    def ready_for_mission(self) -> bool:
+        """Whether navigation and payload execution can start a new mission."""
+        return (
+            self.autopilot is not None
+            and self.payload is not None
+            and self._active_task_id is None
+            and self._terminal_result is None
+        )
+
     # ---------------------------------------------------------
     # Planning
     # ---------------------------------------------------------
@@ -257,12 +267,12 @@ class DroneController:
                 "Hotspot is not confirmed for extinguishing"
             )
 
-        self._active_task_id = task.task_id
-
         self.autopilot.goto(
             hotspot.position,
             speed_mps=cruise_speed_mps,
         )
+
+        self._active_task_id = task.task_id
 
         return MissionExecutionResult(
             status="TRANSIT",
@@ -347,6 +357,9 @@ class DroneController:
                 water_used_l=0.0,
                 reason=decision.reason,
             )
+
+            self._terminal_result = result
+            self._active_task_id = None
 
             return result
 
