@@ -469,3 +469,80 @@ Full test suite: PASS
 
 No Phase 2 milestone should be considered complete unless both targeted
 autonomy tests and the full repository test suite remain green.
+
+## Phase 3 — Swarm Integration Decisions
+
+### Swarm adapter boundary
+
+`autonomy/swarm_adapter.py` is the boundary between swarm-wide decisions and
+one drone's local execution.
+
+The swarm brain owns allocation and swarm-wide decisions. The local adapter
+does not reinterpret those decisions as unconditional permission to perform
+physical actions.
+
+### Assignment safety
+
+A task assignment is executable only when:
+
+- the task belongs to this drone;
+- the assignment epoch matches the drone epoch;
+- the task epoch matches the drone epoch;
+- the task status is executable;
+- the required target hotspot is locally known;
+- the target is not explicitly assigned to another drone;
+- the local controller accepts the mission.
+
+Stale assignments are rejected before navigation or physical action.
+
+### Health safety
+
+Before advancing an active mission, local health is evaluated.
+
+Unsafe health causes the controller to hold when an autopilot is available and
+blocks mission execution. The adapter publishes a warning alert rather than
+continuing because a swarm command cannot override a local safety condition.
+
+### Message ownership
+
+Heartbeat and hotspot reports update local information.
+
+Refill grants are retained only when they are addressed to this drone and match
+the current epoch.
+
+Path claims are retained only for this drone's local path state.
+
+These messages do not bypass local health, resource, geometry, or mission
+safety checks.
+
+### Completion reporting
+
+The local controller produces `MissionExecutionResult` with execution-level
+fields: status, success, water used, and reason.
+
+The adapter maps those fields into the shared `TaskComplete` contract.
+`result_status` is left as `None` because the local controller does not own a
+`HotspotStatus` transition. The adapter does not invent shared-contract state.
+
+### Alert contract
+
+Autonomy safety rejections use the existing shared `Alert` contract with
+`Severity.WARNING` and `AlertKind.GENERIC` because the shared enum does not
+define a dedicated autonomy alert kind.
+
+### Integration principle
+
+Shared contracts are treated as authoritative. When the autonomy layer needs
+different information, the adapter adapts to the contract rather than
+changing the contract solely to simplify autonomy implementation.
+
+### Tests proving the boundary
+
+Phase 3 integration tests verify:
+
+- required swarm subscriptions exist;
+- heartbeat messages update local state without physical action;
+- hotspot reports update the local target;
+- assignments for another drone are ignored;
+- autonomy alerts satisfy the exact shared `Alert` contract;
+- refill messages for another drone do not alter local refill state.
