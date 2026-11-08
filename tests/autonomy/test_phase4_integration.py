@@ -384,7 +384,7 @@ def test_conflicting_remote_path_is_detected():
             Position(x=10, y=1, z=20),
         ],
         valid_from=100,
-        valid_until=120,
+        valid_until=101,
         altitude_band_m=(15, 25),
     )
 

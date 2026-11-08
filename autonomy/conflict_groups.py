@@ -61,7 +61,7 @@ def _minimum_route_distance(
     first: PlannedDroneRoute,
     second: PlannedDroneRoute,
 ) -> float:
-    """Return minimum horizontal distance between route waypoints."""
+    """Return minimum horizontal distance between route segments."""
 
     minimum = float("inf")
 
@@ -75,7 +75,127 @@ def _minimum_route_distance(
             if distance < minimum:
                 minimum = distance
 
+    for first_start, first_end in zip(
+        first.waypoints,
+        first.waypoints[1:],
+    ):
+        for second_start, second_end in zip(
+            second.waypoints,
+            second.waypoints[1:],
+        ):
+            if _segments_intersect(
+                first_start,
+                first_end,
+                second_start,
+                second_end,
+            ):
+                return 0.0
+
+            minimum = min(
+                minimum,
+                _point_to_segment_distance(
+                    first_start,
+                    second_start,
+                    second_end,
+                ),
+                _point_to_segment_distance(
+                    first_end,
+                    second_start,
+                    second_end,
+                ),
+                _point_to_segment_distance(
+                    second_start,
+                    first_start,
+                    first_end,
+                ),
+                _point_to_segment_distance(
+                    second_end,
+                    first_start,
+                    first_end,
+                ),
+            )
+
     return minimum
+
+
+def _point_to_segment_distance(
+    point: Position,
+    start: Position,
+    end: Position,
+) -> float:
+    segment_x = end.x - start.x
+    segment_y = end.y - start.y
+    length_squared = segment_x * segment_x + segment_y * segment_y
+    if length_squared == 0:
+        return point.distance_to(start, horizontal=True)
+
+    projection = (
+        (point.x - start.x) * segment_x
+        + (point.y - start.y) * segment_y
+    ) / length_squared
+    projection = min(1.0, max(0.0, projection))
+    closest = Position(
+        x=start.x + projection * segment_x,
+        y=start.y + projection * segment_y,
+        z=0,
+    )
+    return point.distance_to(closest, horizontal=True)
+
+
+def _segments_intersect(
+    first_start: Position,
+    first_end: Position,
+    second_start: Position,
+    second_end: Position,
+) -> bool:
+    def orientation(a: Position, b: Position, c: Position) -> float:
+        return (
+            (b.x - a.x) * (c.y - a.y)
+            - (b.y - a.y) * (c.x - a.x)
+        )
+
+    def within(value: float, lower: float, upper: float) -> bool:
+        return min(lower, upper) <= value <= max(lower, upper)
+
+    first_orientation = orientation(first_start, first_end, second_start)
+    second_orientation = orientation(first_start, first_end, second_end)
+    third_orientation = orientation(second_start, second_end, first_start)
+    fourth_orientation = orientation(second_start, second_end, first_end)
+
+    if (
+        first_orientation == 0
+        and within(second_start.x, first_start.x, first_end.x)
+        and within(second_start.y, first_start.y, first_end.y)
+    ):
+        return True
+    if (
+        second_orientation == 0
+        and within(second_end.x, first_start.x, first_end.x)
+        and within(second_end.y, first_start.y, first_end.y)
+    ):
+        return True
+    if (
+        third_orientation == 0
+        and within(first_start.x, second_start.x, second_end.x)
+        and within(first_start.y, second_start.y, second_end.y)
+    ):
+        return True
+    if (
+        fourth_orientation == 0
+        and within(first_end.x, second_start.x, second_end.x)
+        and within(first_end.y, second_start.y, second_end.y)
+    ):
+        return True
+
+    first_pair_crosses = (
+        first_orientation > 0 > second_orientation
+        or second_orientation > 0 > first_orientation
+    )
+    second_pair_crosses = (
+        third_orientation > 0 > fourth_orientation
+        or fourth_orientation > 0 > third_orientation
+    )
+    return first_pair_crosses and second_pair_crosses
 
 
 def routes_may_conflict(

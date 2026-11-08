@@ -64,6 +64,14 @@ class DroneController:
             and self._terminal_result is None
         )
 
+    @property
+    def active_path(self) -> tuple[Position, ...] | None:
+        """Return the unflown portion of the active planned route."""
+        if self._active_path is None:
+            return None
+
+        return self._active_path[self._path_index:]
+
     # ---------------------------------------------------------
     # Planning
     # ---------------------------------------------------------
@@ -289,6 +297,35 @@ class DroneController:
             water_used_l=0.0,
             reason="Navigating to assigned hotspot",
         )
+
+    def replace_active_path(
+        self,
+        planned_path: list[Position],
+        *,
+        cruise_speed_mps: float | None = None,
+    ) -> None:
+        """Replace an active route after a newly published safe claim."""
+        if self.autopilot is None:
+            raise RuntimeError(
+                "Route replacement requires an autopilot"
+            )
+
+        if self._active_task_id is None:
+            raise RuntimeError(
+                "Cannot replace a route without an active mission"
+            )
+
+        if not planned_path:
+            raise ValueError(
+                "Replacement path must contain at least one waypoint"
+            )
+
+        self.autopilot.goto(
+            planned_path[0],
+            speed_mps=cruise_speed_mps,
+        )
+        self._active_path = tuple(planned_path)
+        self._path_index = 0
 
     def step_extinguish(
         self,

@@ -292,6 +292,43 @@ class MissionCoordinator:
             resource_assessment=exact_assessment,
         )
 
+    def check_route_resources(
+        self,
+        task: Task,
+        waypoints: list[Position],
+        context: MissionPlanningContext,
+    ) -> ResourceAssessment:
+        """Reassess resources for a replacement route and return leg."""
+        if not waypoints:
+            raise ValueError("Route must contain at least one waypoint")
+
+        return_route = find_path(
+            context.occupancy_grid,
+            context.grid_spec,
+            waypoints[-1],
+            context.base_position,
+        )
+        if return_route is None:
+            raise ValueError("No safe route back to base is available")
+
+        outbound_distance_m = sum(
+            first.distance_to(second)
+            for first, second in zip(waypoints, waypoints[1:])
+        )
+        return_distance_m = sum(
+            first.distance_to(second)
+            for first, second in zip(return_route, return_route[1:])
+        )
+        estimates = self._resource_estimates(context.platform_spec)
+        return self.check_resources_for_task(
+            task,
+            outbound_distance_m=outbound_distance_m,
+            return_distance_m=return_distance_m,
+            cruise_speed_mps=context.platform_spec.cruise_speed_mps,
+            hover_seconds=context.platform_spec.drop_release_s,
+            **estimates,
+        )
+
     def _resource_estimates(
         self,
         platform_spec: PlatformSpec,
@@ -487,7 +524,7 @@ class MissionCoordinator:
                 for index in range(sample_count + 1)
             ]
             proposed_samples = [
-                self._position_on_path(
+                self.position_on_path(
                     plan.waypoints,
                     route_start,
                     route_end,
@@ -496,7 +533,7 @@ class MissionCoordinator:
                 for timestamp in times
             ]
             claimed_samples = [
-                self._position_on_path(
+                self.position_on_path(
                     claim.waypoints,
                     claim.valid_from,
                     claim.valid_until,
@@ -520,7 +557,7 @@ class MissionCoordinator:
         )
 
     @staticmethod
-    def _position_on_path(
+    def position_on_path(
         waypoints: list[Position],
         valid_from: float,
         valid_until: float,

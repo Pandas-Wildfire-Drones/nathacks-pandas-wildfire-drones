@@ -133,6 +133,26 @@ def test_transitive_conflicts_form_one_group():
     assert groups[0] == {"d1", "d2", "d3"}
 
 
+def test_sparse_crossing_segments_form_one_group():
+    routes = [
+        route(
+            "horizontal",
+            [point(0, 5, 10), point(10, 5, 10)],
+            (10, 20),
+        ),
+        route(
+            "vertical",
+            [point(5, 0, 10), point(5, 10, 10)],
+            (10, 20),
+        ),
+    ]
+
+    assert build_conflict_groups(
+        routes,
+        horizontal_threshold_m=1,
+    ) == [{"horizontal", "vertical"}]
+
+
 def test_same_drone_does_not_conflict_with_itself():
     first = route(
         "d1",

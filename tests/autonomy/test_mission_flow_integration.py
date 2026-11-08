@@ -468,3 +468,82 @@ def test_dynamic_replanning_uses_existing_conflict_group_replanner():
     assert replanned["east"][-1] == cell(1, 2)
     assert replanned["west"][-1] == cell(1, 0)
     assert replanned != existing
+
+
+def test_new_conflicting_remote_claim_replans_and_republishes_active_route():
+    context = MissionPlanningContext(
+        occupancy_grid=[[0] * 3 for _ in range(3)],
+        grid_spec=GridSpec(
+            origin=Position(x=-0.5, y=-0.5, z=0),
+            resolution_m=1,
+            rows=3,
+            cols=3,
+        ),
+        base_position=Position(x=0, y=0, z=20),
+        platform_spec=default_extinguisher_spec(),
+        minimum_separation_m=1.5,
+        time_step_s=1,
+        altitude_band_m=(20, 30),
+    )
+    events = []
+    bus = FakeBus(events)
+    adapter, _, controller, autopilot, _ = make_adapter(
+        context=context,
+        bus=bus,
+        events=events,
+    )
+    adapter.state.current_hotspot = make_hotspot(
+        position=Position(x=2, y=2, z=20),
+    )
+    result = adapter.handle_message(make_assignment())
+    assert result.status == "TRANSIT"
+    original_path = controller.active_path
+    assert original_path is not None
+
+    remote_claim = PathClaim(
+        drone_id="d2",
+        waypoints=[
+            Position(x=2, y=0, z=25),
+            Position(x=2, y=1, z=25),
+            Position(x=1, y=2, z=25),
+            Position(x=0, y=2, z=25),
+        ],
+        valid_from=0,
+        valid_until=3,
+        altitude_band_m=(20, 30),
+    )
+    adapter.state.remote_path_claims.append(remote_claim)
+    assert adapter.check_path_conflicts(
+        list(original_path),
+        context.minimum_separation_m,
+        valid_from=adapter.now,
+        time_step_s=context.time_step_s,
+        altitude_band_m=context.altitude_band_m,
+    )
+    adapter.state.remote_path_claims.clear()
+
+    adapter.handle_path_claim(
+        make_assignment(),
+        remote_claim,
+    )
+
+    claims = [
+        message.body
+        for topic, message in bus.published
+        if topic == "swarm/path_claims"
+    ]
+    assert len(claims) == 2
+    replacement_claim = claims[-1]
+    assert isinstance(replacement_claim, PathClaim)
+    assert replacement_claim.waypoints != list(original_path)
+    assert controller.active_path == tuple(replacement_claim.waypoints)
+    assert autopilot.hold_calls >= 1
+    assert autopilot.goto_targets[-1] == replacement_claim.waypoints[0]
+    assert events[-2:] == ["path_claim", "begin_extinguish"]
+    assert adapter.check_path_conflicts(
+        replacement_claim.waypoints,
+        adapter.planning_context.minimum_separation_m,
+        valid_from=adapter.now,
+        time_step_s=adapter.planning_context.time_step_s,
+        altitude_band_m=adapter.planning_context.altitude_band_m,
+    ) == []

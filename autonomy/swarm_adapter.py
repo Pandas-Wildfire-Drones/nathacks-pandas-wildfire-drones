@@ -9,9 +9,10 @@ local execution safety.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import ceil
 from typing import Any, Callable
 
-from autonomy.cbs_planner import PathRequest
+from autonomy.cbs_planner import PathRequest, path_duration_s
 from autonomy.deconfliction import Conflict, detect_conflicts
 from autonomy.drone_controller import DroneController, MissionExecutionResult
 from autonomy.health_manager import evaluate_drone_health
@@ -419,12 +420,16 @@ class SwarmAutonomyAdapter:
             1,
             len(proposed_path) - 1,
         ) * route_step
-        other_paths = []
+        conflicts: list[Conflict] = []
         for claim in self.state.remote_path_claims:
             if (
                 claim.valid_until < route_start
                 or claim.valid_from > route_end
             ):
+                continue
+            overlap_start = max(route_start, claim.valid_from)
+            overlap_end = min(route_end, claim.valid_until)
+            if overlap_start > overlap_end:
                 continue
             if (
                 altitude_band_m is not None
@@ -435,13 +440,47 @@ class SwarmAutonomyAdapter:
                 )
             ):
                 continue
-            other_paths.append(claim.waypoints)
+            claim_time_step = (
+                (claim.valid_until - claim.valid_from)
+                / max(1, len(claim.waypoints) - 1)
+            )
+            sample_step = min(route_step, claim_time_step)
+            sample_count = max(
+                1,
+                ceil((overlap_end - overlap_start) / sample_step),
+            )
+            timestamps = [
+                overlap_start
+                + (overlap_end - overlap_start) * index / sample_count
+                for index in range(sample_count + 1)
+            ]
+            proposed_samples = [
+                self.mission_coordinator.position_on_path(
+                    proposed_path,
+                    route_start,
+                    route_end,
+                    timestamp,
+                )
+                for timestamp in timestamps
+            ]
+            claim_samples = [
+                self.mission_coordinator.position_on_path(
+                    claim.waypoints,
+                    claim.valid_from,
+                    claim.valid_until,
+                    timestamp,
+                )
+                for timestamp in timestamps
+            ]
+            conflicts.extend(
+                detect_conflicts(
+                    proposed_samples,
+                    [claim_samples],
+                    minimum_separation_m,
+                )
+            )
 
-        return detect_conflicts(
-            proposed_path,
-            other_paths,
-            minimum_separation_m,
-        )
+        return conflicts
 
     def publish_planned_path(
         self,
@@ -575,6 +614,209 @@ class SwarmAutonomyAdapter:
             if existing.drone_id != claim.drone_id
         ]
         self.state.remote_path_claims.append(claim)
+        self._replan_active_mission_if_conflicting()
+
+    def _replan_active_mission_if_conflicting(self) -> None:
+        task = self.state.current_task
+        hotspot = self.state.current_hotspot
+        context = self.planning_context
+        if (
+            task is None
+            or hotspot is None
+            or context is None
+        ):
+            return
+
+        current_path = self.controller.active_path
+        if current_path is None:
+            return
+
+        route = [self.drone.position, *current_path]
+        if self.check_path_conflicts(
+            route,
+            context.minimum_separation_m,
+            valid_from=self.now,
+            time_step_s=context.time_step_s,
+            altitude_band_m=context.altitude_band_m,
+        ) == []:
+            return
+
+        autopilot = self.controller.autopilot
+        health = evaluate_drone_health(self.drone)
+        if not health.safe:
+            if autopilot is not None:
+                if health.action == "RETURN":
+                    autopilot.return_to_launch()
+                else:
+                    autopilot.hold()
+            self._publish_alert(
+                None,
+                f"Autonomy blocked route replanning: {health.reason}",
+            )
+            return
+
+        if autopilot is not None:
+            autopilot.hold()
+
+        active_claims = [
+            claim
+            for claim in self.state.remote_path_claims
+            if claim.valid_until >= self.now
+        ]
+        requests = [
+            PathRequest(
+                drone_id=self.drone.drone_id,
+                start=self.drone.position,
+                goal=hotspot.position,
+                speed_mps=context.platform_spec.cruise_speed_mps,
+                start_time=self.now,
+                altitude_band_m=context.altitude_band_m,
+            )
+        ]
+        existing_routes: dict[str, list[Position]] = {
+            self.drone.drone_id: route,
+        }
+
+        for claim in active_claims:
+            if not claim.waypoints:
+                self._publish_alert(
+                    None,
+                    "Cannot safely replan around an empty remote path claim",
+                )
+                return
+
+            route_duration = claim.valid_until - claim.valid_from
+            distance = sum(
+                first.distance_to(second)
+                for first, second in zip(
+                    claim.waypoints,
+                    claim.waypoints[1:],
+                )
+            )
+            speed = (
+                distance / route_duration
+                if route_duration > 0 and distance > 0
+                else context.platform_spec.cruise_speed_mps
+            )
+            requests.append(
+                PathRequest(
+                    drone_id=claim.drone_id,
+                    start=claim.waypoints[0],
+                    goal=claim.waypoints[-1],
+                    speed_mps=speed,
+                    start_time=self.now,
+                    altitude_band_m=claim.altitude_band_m,
+                )
+            )
+            existing_routes[claim.drone_id] = claim.waypoints
+
+        replanned = self.replan_conflicting_groups(
+            requests,
+            existing_routes,
+            context.occupancy_grid,
+            context.grid_spec,
+            minimum_separation_m=context.minimum_separation_m,
+            conflict_group_threshold_m=context.minimum_separation_m,
+            time_step_s=context.time_step_s,
+        )
+        if replanned is None:
+            if autopilot is not None:
+                autopilot.hold()
+            return
+
+        replacement = replanned.get(self.drone.drone_id)
+        if replacement is None:
+            if autopilot is not None:
+                autopilot.hold()
+            self._publish_alert(
+                None,
+                "Local replanning produced no replacement route",
+            )
+            return
+
+        replacement = list(replacement)
+        if replacement[-1] != hotspot.position:
+            replacement.append(hotspot.position)
+
+        try:
+            assessment = self.mission_coordinator.check_route_resources(
+                task,
+                replacement,
+                context,
+            )
+        except ValueError as exc:
+            if autopilot is not None:
+                autopilot.hold()
+            self._publish_alert(
+                None,
+                f"Replacement route resource check failed: {exc}",
+            )
+            return
+
+        if not assessment.can_complete_mission:
+            if autopilot is not None:
+                autopilot.hold()
+            self._publish_alert(
+                None,
+                "Replacement route failed resource checks: "
+                + "; ".join(assessment.reasons),
+            )
+            return
+
+        plan = MissionPlan(
+            task_id=task.task_id,
+            drone_id=self.drone.drone_id,
+            waypoints=replacement,
+            duration_s=path_duration_s(
+                replacement,
+                time_step_s=context.time_step_s,
+            ),
+            time_step_s=context.time_step_s,
+            water_required_l=(
+                task.volume_l
+                if task.volume_l is not None
+                else (self.drone.water_remaining_l or 0.0)
+            ),
+        )
+        try:
+            claim_message = self.mission_coordinator.publish_plan(
+                plan,
+                other_claims=self.state.remote_path_claims,
+                minimum_separation_m=context.minimum_separation_m,
+                valid_from=self.now,
+                altitude_band_m=context.altitude_band_m,
+            )
+        except (ValueError, RuntimeError) as exc:
+            claim_message = None
+            reason = f"Replacement path claim publication failed: {exc}"
+        else:
+            reason = (
+                "Replacement route still conflicts with an active "
+                "remote path claim"
+            )
+
+        if claim_message is None:
+            if autopilot is not None:
+                autopilot.hold()
+            self._publish_alert(None, reason)
+            return
+
+        try:
+            self.controller.replace_active_path(
+                replacement,
+                cruise_speed_mps=context.platform_spec.cruise_speed_mps,
+            )
+        except (ValueError, RuntimeError) as exc:
+            if autopilot is not None:
+                autopilot.hold()
+            self._publish_alert(
+                None,
+                f"Published replacement route could not be activated: {exc}",
+            )
+            return
+
+        if isinstance(claim_message.body, PathClaim):
+            self.state.latest_path_claim = claim_message.body
 
     def _find_hotspot(self, hotspot_id: str | None) -> Hotspot | None:
         if hotspot_id is None:
