@@ -15,6 +15,10 @@ from contracts.enums import (
     TaskStatus,
     TaskType,
 )
+from autonomy.path_claim_manager import PathClaimManager
+from contracts.enums import MessageType
+from contracts.messages import PathClaim
+from contracts.topics import ROUTES
 from contracts.messages import SwarmMessage, TaskAssign
 
 
@@ -251,3 +255,98 @@ def test_unhealthy_drone_holds_instead_of_executing():
     assert controller.autopilot.hold_calls == 1
     assert controller.step_calls == []
     assert len(bus.published) == 1
+
+def test_adapter_subscribes_to_correct_path_claim_topic():
+    bus = FakeBus()
+
+    SwarmAutonomyAdapter(make_drone(), FakeController(), bus)
+
+    subscribed_topics = [topic for topic, _ in bus.subscriptions]
+
+    assert ROUTES[MessageType.PATH_CLAIM] in subscribed_topics
+    assert "swarm/path_claim" not in subscribed_topics
+
+
+def test_publish_planned_path_when_no_conflict():
+    bus = FakeBus()
+    drone = make_drone()
+    adapter = SwarmAutonomyAdapter(drone, FakeController(), bus)
+    manager = PathClaimManager(bus)
+
+    remote_claim = PathClaim(
+        drone_id="drone_99",
+        waypoints=[
+            Position(x=100, y=100, z=20),
+            Position(x=110, y=100, z=20),
+        ],
+        valid_from=0,
+        valid_until=100,
+    )
+
+    adapter.handle_message(
+        make_message(remote_claim)
+    )
+
+    proposed_path = [
+        Position(x=0, y=0, z=20),
+        Position(x=10, y=0, z=20),
+    ]
+
+    message = adapter.publish_planned_path(
+        manager,
+        proposed_path,
+        valid_from=0,
+        time_step_s=0.1,
+        altitude_band_m=(20, 30),
+        minimum_separation_m=5,
+    )
+
+    assert message is not None
+    assert message.body.drone_id == drone.drone_id
+    assert message.body.waypoints == proposed_path
+    assert len(bus.published) == 1
+
+    topic, published_message = bus.published[0]
+    assert topic == ROUTES[MessageType.PATH_CLAIM]
+    assert published_message == message
+
+
+def test_publish_planned_path_rejects_active_conflict():
+    bus = FakeBus()
+    drone = make_drone()
+    adapter = SwarmAutonomyAdapter(drone, FakeController(), bus)
+    manager = PathClaimManager(bus)
+
+    proposed_path = [
+        Position(x=0, y=0, z=20),
+        Position(x=10, y=0, z=20),
+    ]
+
+    remote_claim = PathClaim(
+        drone_id="drone_99",
+        waypoints=[
+            Position(x=0, y=1, z=20),
+            Position(x=10, y=1, z=20),
+        ],
+        valid_from=0,
+        valid_until=100,
+    )
+
+    adapter.handle_message(
+        make_message(remote_claim)
+    )
+
+    message = adapter.publish_planned_path(
+        manager,
+        proposed_path,
+        valid_from=0,
+        time_step_s=0.1,
+        altitude_band_m=(20, 30),
+        minimum_separation_m=5,
+    )
+
+    assert message is None
+
+    # No path claim was published; only the rejection alert was sent.
+    assert len(bus.published) == 1
+    assert bus.published[0][0] == "ground/alerts"

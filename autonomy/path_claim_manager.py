@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from math import isfinite
+
 from contracts.entities import DroneState
 from contracts.geometry import Position
 from contracts.interfaces import Bus
@@ -72,6 +74,67 @@ class PathClaimManager:
             waypoints,
             valid_from=valid_from,
             valid_until=valid_until,
+            altitude_band_m=altitude_band_m,
+        )
+
+        self.bus.publish(
+            topic_for(message),
+            message,
+        )
+
+        return message
+
+    def create_from_planned_path(
+        self,
+        drone: DroneState,
+        waypoints: list[Position],
+        *,
+        valid_from: float,
+        time_step_s: float,
+        altitude_band_m: tuple[float, float] | None = None,
+    ) -> SwarmMessage:
+        """Create a PathClaim from a CBS-planned route.
+
+        The claim window runs from valid_from for the planned duration,
+        (len(waypoints) - 1) * time_step_s. A one-waypoint route (the drone
+        is already at its goal) still gets one planning step, because
+        create_claim requires valid_until > valid_from.
+        """
+
+        if not waypoints:
+            raise ValueError("waypoints must not be empty")
+
+        if not isfinite(time_step_s) or time_step_s <= 0:
+            raise ValueError(
+                "time_step_s must be finite and greater than zero"
+            )
+
+        duration_s = max(1, len(waypoints) - 1) * time_step_s
+
+        return self.create_claim(
+            drone,
+            waypoints,
+            valid_from=valid_from,
+            valid_until=valid_from + duration_s,
+            altitude_band_m=altitude_band_m,
+        )
+
+    def publish_from_planned_path(
+        self,
+        drone: DroneState,
+        waypoints: list[Position],
+        *,
+        valid_from: float,
+        time_step_s: float,
+        altitude_band_m: tuple[float, float] | None = None,
+    ) -> SwarmMessage:
+        """Create a claim from a planned path and publish it on the bus."""
+
+        message = self.create_from_planned_path(
+            drone,
+            waypoints,
+            valid_from=valid_from,
+            time_step_s=time_step_s,
             altitude_band_m=altitude_band_m,
         )
 

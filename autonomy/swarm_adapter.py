@@ -15,7 +15,9 @@ from autonomy.deconfliction import Conflict, detect_conflicts
 from autonomy.drone_controller import DroneController, MissionExecutionResult
 from autonomy.health_manager import evaluate_drone_health
 from contracts.entities import Alert, DroneState, Hotspot, Task
-from contracts.enums import AlertKind, Severity, TaskStatus, TaskType
+from contracts.geometry import Position
+from contracts.enums import AlertKind, MessageType, Severity, TaskStatus, TaskType
+from autonomy.path_claim_manager import PathClaimManager
 from contracts.messages import (
     AlertNotice,
     Heartbeat,
@@ -26,7 +28,7 @@ from contracts.messages import (
     TaskAssign,
     TaskComplete,
 )
-from contracts.topics import topic_for
+from contracts.topics import ROUTES, topic_for
 
 
 @dataclass
@@ -78,7 +80,7 @@ class SwarmAutonomyAdapter:
             "swarm/heartbeat",
             "swarm/hotspot_report",
             "swarm/refill_grant",
-            "swarm/path_claim",
+            ROUTES[MessageType.PATH_CLAIM],
         )
 
         for topic in topics:
@@ -268,6 +270,41 @@ class SwarmAutonomyAdapter:
             proposed_path,
             other_paths,
             minimum_separation_m,
+        )
+
+    def publish_planned_path(
+        self,
+        path_claim_manager: PathClaimManager,
+        waypoints: list[Position],
+        *,
+        valid_from: float,
+        time_step_s: float,
+        altitude_band_m: tuple[float, float] | None,
+        minimum_separation_m: float,
+    ) -> SwarmMessage | None:
+        """Publish a planned route only when active claims permit it."""
+
+        conflicts = self.check_path_conflicts(
+            waypoints,
+            minimum_separation_m,
+        )
+
+        if conflicts:
+            self._publish_alert(
+                None,
+                (
+                    "Rejected planned path because it conflicts "
+                    "with an active remote path claim"
+                ),
+            )
+            return None
+
+        return path_claim_manager.publish_from_planned_path(
+            self.drone,
+            waypoints,
+            valid_from=valid_from,
+            time_step_s=time_step_s,
+            altitude_band_m=altitude_band_m,
         )
 
     def handle_heartbeat(

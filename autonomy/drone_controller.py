@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from contracts.entities import DroneState, Hotspot, Task, Zone
 from contracts.enums import (
     DroneKind,
+    DroneStatus,
     HotspotStatus,
     TaskStatus,
     TaskType,
@@ -195,6 +196,14 @@ class DroneController:
                 "Mission execution requires an autopilot and payload"
             )
 
+        if drone.status in (
+            DroneStatus.FAULT,
+            DroneStatus.LOST,
+        ):
+            raise ValueError(
+                f"Drone is unavailable: {drone.status.value}"
+            )
+
         if self._active_task_id is not None:
             raise RuntimeError(
                 f"Mission task {self._active_task_id} is already active"
@@ -281,6 +290,21 @@ class DroneController:
             raise RuntimeError(
                 "Mission execution requires an autopilot and payload"
             )
+        if drone.status in (
+            DroneStatus.FAULT,
+            DroneStatus.LOST,
+        ):
+            self.autopilot.hold()
+
+            result = MissionExecutionResult(
+                status="ABORTED",
+                success=False,
+                water_used_l=0.0,
+                reason=f"Drone is unavailable: {drone.status.value}",
+            )
+
+            self._active_task_id = None
+            return result
 
         # Once a mission has completed, return the exact same terminal
         # result and never release payload again.

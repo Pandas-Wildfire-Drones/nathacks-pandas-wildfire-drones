@@ -118,7 +118,7 @@ def test_adapter_subscribes_to_required_swarm_topics():
     assert "swarm/heartbeat" in topics
     assert "swarm/hotspot_report" in topics
     assert "swarm/refill_grant" in topics
-    assert "swarm/path_claim" in topics
+    assert "swarm/path_claims" in topics
 
 
 def test_heartbeat_updates_local_state_without_physical_action():
