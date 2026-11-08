@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.1` · `contract_version: 0.2.0` · last updated 2026-11-07
+`context_version: 0.3.1` · `contract_version: 0.3.0` · last updated 2026-11-08
 
 ---
 
@@ -412,7 +412,7 @@ __all__ = ["CONTRACT_VERSION", "Contract", "FrozenContract", "Seconds"]
 
 # Bump when a field is renamed/removed or semantics change. Add a line to the
 # changelog in context.md. Messages carry this in `SwarmMessage.v`.
-CONTRACT_VERSION = "0.2.0"
+CONTRACT_VERSION = "0.3.0"
 
 # All timestamps/durations are float SECONDS in the Clock's timebase
 # (sim time in the simulator, wall-clock epoch seconds on real hardware).
@@ -431,7 +431,7 @@ class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 ```
 
-#### `contracts/enums.py` (169 lines)
+#### `contracts/enums.py` (170 lines)
 
 ```python
 """Enumerations shared by every workstream.
@@ -548,6 +548,7 @@ class MessageType(StrEnum):
     HOTSPOT_REPORT = "HOTSPOT_REPORT"
     WATER_SOURCE_REPORT = "WATER_SOURCE_REPORT"
     MAP_SYNC = "MAP_SYNC"
+    CLUSTER_UPDATE = "CLUSTER_UPDATE"
     TASK_ANNOUNCE = "TASK_ANNOUNCE"
     TASK_BID = "TASK_BID"
     TASK_ASSIGN = "TASK_ASSIGN"
@@ -806,7 +807,7 @@ class Obstacle(FrozenContract):
     kind: str = "unknown"  # e.g. "tree", "pole", "terrain"
 ```
 
-#### `contracts/entities.py` (193 lines)
+#### `contracts/entities.py` (230 lines)
 
 ```python
 """Domain entities: the nouns of the system.
@@ -822,6 +823,8 @@ Design notes
 """
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import Field, model_validator
 
 from .base import Contract, FrozenContract
@@ -832,9 +835,11 @@ from .enums import (
 from .geometry import Position, point_in_polygon
 
 __all__ = [
-    "DroneState", "Hotspot", "Zone", "Task", "WaterSource", "RefillStation",
+    "ClusterId", "ClusterSnapshot", "DroneState", "Hotspot", "Zone", "Task", "WaterSource", "RefillStation",
     "GridCellUpdate", "Alert",
 ]
+
+ClusterId = Annotated[str, Field(min_length=1, pattern=r"^[^/#*+\s]+$")]
 
 
 class DroneState(Contract):
@@ -859,6 +864,8 @@ class DroneState(Contract):
     current_task_id: str | None = None
     leader_id: str | None = None   # who this drone currently believes is leader
     epoch: int = Field(default=0, ge=0)  # leader epoch this drone believes in
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
     # Health flags keyed by sensor/subsystem name, e.g. {"thermal": True, "lidar": True,
     # "gnss_rtk": False, "comms": True, "payload": True}. Names are defined in config.py (SENSOR_NAMES).
     sensors_ok: dict[str, bool] = Field(default_factory=dict)
@@ -905,9 +912,38 @@ class Zone(Contract):
     boundary: list[Position] = Field(min_length=3)  # polygon in local x/y
     assigned_to: str | None = None
     last_scanned: float | None = None
+    cluster_id: ClusterId | None = None
 
     def contains(self, pos: Position) -> bool:
         return point_in_polygon(pos.x, pos.y, self.boundary)
+
+
+class ClusterSnapshot(FrozenContract):
+    """Versioned membership and zone ownership view published by a cluster leader."""
+
+    cluster_id: ClusterId
+    leader_id: str = Field(min_length=1)
+    cluster_epoch: int = Field(ge=0)
+    member_ids: list[str] = Field(min_length=1)
+    zone_ids: list[str] = Field(default_factory=list)
+    updated_at: float = Field(allow_inf_nan=False)
+    lease_until: float = Field(allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _membership_and_lease_valid(self) -> "ClusterSnapshot":
+        if any(not member_id for member_id in self.member_ids):
+            raise ValueError("member_ids must not contain empty IDs")
+        if len(set(self.member_ids)) != len(self.member_ids):
+            raise ValueError("member_ids must be unique")
+        if self.leader_id not in self.member_ids:
+            raise ValueError("leader_id must be included in member_ids")
+        if any(not zone_id for zone_id in self.zone_ids):
+            raise ValueError("zone_ids must not contain empty IDs")
+        if len(set(self.zone_ids)) != len(self.zone_ids):
+            raise ValueError("zone_ids must be unique")
+        if self.lease_until <= self.updated_at:
+            raise ValueError("lease_until must be later than updated_at")
+        return self
 
 
 class Task(Contract):
@@ -923,6 +959,8 @@ class Task(Contract):
     created_at: float
     deadline: float | None = None
     epoch: int = Field(default=0, ge=0)  # leader epoch that issued/assigned it
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
     # EXTINGUISH only: litres (of the loaded agent) to release on this hotspot. One sortie can serve several
     # hotspots because the tank is much bigger than a small spot fire needs. None = "all you have".
     volume_l: float | None = Field(default=None, gt=0)
@@ -1004,7 +1042,7 @@ class Alert(Contract):
     timestamp: float
 ```
 
-#### `contracts/messages.py` (299 lines)
+#### `contracts/messages.py` (312 lines)
 
 ```python
 """Bus messages: one frozen body model per MessageType, joined by a discriminated union.
@@ -1026,14 +1064,14 @@ from typing import Annotated, Literal, Union
 from pydantic import Field, model_validator
 
 from .base import CONTRACT_VERSION, FrozenContract
-from .entities import Alert, DroneState, GridCellUpdate, Hotspot, Task, WaterSource
+from .entities import Alert, ClusterId, ClusterSnapshot, DroneState, GridCellUpdate, Hotspot, Task, WaterSource
 from .enums import (
     CommandKind, ExtinguishingAgent, HotspotStatus, MessageType, RefillTargetKind, SimFaultKind,
 )
 from .geometry import GridSpec, Position
 
 __all__ = [
-    "Heartbeat", "HotspotReport", "WaterSourceReport", "MapSync", "TaskAnnounce", "TaskBid",
+    "Heartbeat", "HotspotReport", "WaterSourceReport", "MapSync", "ClusterUpdate", "TaskAnnounce", "TaskBid",
     "TaskAssign", "TaskAck", "TaskComplete", "PathClaim", "LeaderClaim", "RefillRequest",
     "RefillGrant", "GroundCommand", "AlertNotice", "SimFault",
     "Body", "BODY_TYPES", "QoSProfile", "DEFAULT_QOS", "SwarmMessage", "encode", "decode",
@@ -1071,6 +1109,13 @@ class MapSync(_Body):
     water_sources: list[WaterSource] = Field(default_factory=list)
 
 
+class ClusterUpdate(_Body):
+    """Cluster membership, leadership term, and zone ownership snapshot."""
+
+    type: Literal[MessageType.CLUSTER_UPDATE] = MessageType.CLUSTER_UPDATE
+    cluster: ClusterSnapshot
+
+
 class TaskAnnounce(_Body):
     """Leader offers a task for bidding (auction). Bids must arrive before bid_deadline."""
 
@@ -1087,6 +1132,8 @@ class TaskBid(_Body):
     feasible: bool = True      # False = "I cannot do this" (battery, water, range, agent mismatch)
     eta_s: float | None = Field(default=None, ge=0)
     energy_cost_pct: float | None = Field(default=None, ge=0, le=100)
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
 
 
 class TaskAssign(_Body):
@@ -1140,6 +1187,8 @@ class LeaderClaim(_Body):
     candidate_id: str
     epoch: int = Field(ge=0)
     score: float  # e.g. health + endurance + link quality; tie-break on candidate_id
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
 
 
 class RefillRequest(_Body):
@@ -1193,7 +1242,7 @@ class SimFault(_Body):
 
 Body = Annotated[
     Union[
-        Heartbeat, HotspotReport, WaterSourceReport, MapSync, TaskAnnounce, TaskBid, TaskAssign,
+        Heartbeat, HotspotReport, WaterSourceReport, MapSync, ClusterUpdate, TaskAnnounce, TaskBid, TaskAssign,
         TaskAck, TaskComplete, PathClaim, LeaderClaim, RefillRequest, RefillGrant, GroundCommand,
         AlertNotice, SimFault,
     ],
@@ -1205,6 +1254,7 @@ BODY_TYPES: dict[MessageType, type[_Body]] = {
     MessageType.HOTSPOT_REPORT: HotspotReport,
     MessageType.WATER_SOURCE_REPORT: WaterSourceReport,
     MessageType.MAP_SYNC: MapSync,
+    MessageType.CLUSTER_UPDATE: ClusterUpdate,
     MessageType.TASK_ANNOUNCE: TaskAnnounce,
     MessageType.TASK_BID: TaskBid,
     MessageType.TASK_ASSIGN: TaskAssign,
@@ -1233,6 +1283,7 @@ DEFAULT_QOS: dict[MessageType, QoSProfile] = {
     MessageType.HOTSPOT_REPORT: QoSProfile(reliable=True, ttl_s=60),
     MessageType.WATER_SOURCE_REPORT: QoSProfile(reliable=True, ttl_s=60),
     MessageType.MAP_SYNC: QoSProfile(reliable=False, ttl_s=10, rate_hz=1),
+    MessageType.CLUSTER_UPDATE: QoSProfile(reliable=True, ttl_s=15),
     MessageType.TASK_ANNOUNCE: QoSProfile(reliable=True, ttl_s=10),
     MessageType.TASK_BID: QoSProfile(reliable=True, ttl_s=10),
     MessageType.TASK_ASSIGN: QoSProfile(reliable=True, ttl_s=30),
@@ -1308,7 +1359,7 @@ def decode(raw: bytes | str) -> SwarmMessage:
     return SwarmMessage.model_validate_json(raw)
 ```
 
-#### `contracts/topics.py` (87 lines)
+#### `contracts/topics.py` (129 lines)
 
 ```python
 """Topic names and matching rules.
@@ -1332,7 +1383,8 @@ if TYPE_CHECKING:
 __all__ = [
     "ROUTES", "topic_for", "topic_matches", "validate_pattern",
     "SUB_ALL_HEARTBEATS", "SUB_ALL_HOTSPOTS", "SUB_ALL_WATER_SOURCES", "SUB_ALL_SWARM",
-    "SUB_GROUND_COMMANDS", "SUB_GROUND_ALERTS", "SUB_SIM_CONTROL", "sub_my_commands",
+    "SUB_ALL_CLUSTERS", "SUB_GROUND_COMMANDS", "SUB_GROUND_ALERTS", "SUB_SIM_CONTROL",
+    "sub_cluster", "sub_my_commands",
 ]
 
 # Publish routes. {sender}/{receiver} are filled from the message envelope.
@@ -1341,6 +1393,7 @@ ROUTES: dict[MessageType, str] = {
     MessageType.HOTSPOT_REPORT: "drone/{sender}/hotspots",
     MessageType.WATER_SOURCE_REPORT: "drone/{sender}/water_sources",
     MessageType.MAP_SYNC: "swarm/map_sync",
+    MessageType.CLUSTER_UPDATE: "swarm/clusters/{cluster_id}/state",
     MessageType.TASK_ANNOUNCE: "swarm/tasks/announce",
     MessageType.TASK_BID: "swarm/tasks/bids",
     MessageType.TASK_ASSIGN: "drone/{receiver}/cmd",
@@ -1360,6 +1413,7 @@ SUB_ALL_HEARTBEATS = "drone/*/heartbeat"          # leader + ground base
 SUB_ALL_HOTSPOTS = "drone/*/hotspots"             # leader
 SUB_ALL_WATER_SOURCES = "drone/*/water_sources"   # leader
 SUB_ALL_SWARM = "swarm/#"                         # every drone
+SUB_ALL_CLUSTERS = "swarm/clusters/*/#"
 SUB_GROUND_COMMANDS = "ground/commands"           # every drone (filters on target_id)
 SUB_GROUND_ALERTS = "ground/alerts"               # ground base UI
 SUB_SIM_CONTROL = "sim/control"                   # simulator (and sim-aware drone wrappers)
@@ -1370,12 +1424,51 @@ def sub_my_commands(drone_id: str) -> str:
     return f"drone/{drone_id}/cmd"
 
 
+def sub_cluster(cluster_id: str) -> str:
+    """Subscribe to all coordination topics for one cluster."""
+    _validate_cluster_id(cluster_id)
+    return f"swarm/clusters/{cluster_id}/#"
+
+
+def _validate_cluster_id(cluster_id: str) -> None:
+    if not cluster_id or any(char in cluster_id for char in "/#*+") or any(char.isspace() for char in cluster_id):
+        raise ValueError("cluster_id must be a non-empty topic segment without wildcards or whitespace")
+
+
+def _cluster_id_for(msg: "SwarmMessage") -> str | None:
+    body = msg.body
+    if msg.msg_type is MessageType.CLUSTER_UPDATE:
+        return body.cluster.cluster_id
+    if msg.msg_type is MessageType.LEADER_CLAIM:
+        return body.cluster_id
+    if msg.msg_type is MessageType.TASK_ANNOUNCE:
+        return body.task.cluster_id
+    if msg.msg_type is MessageType.TASK_BID:
+        return body.cluster_id
+    return None
+
+
 def topic_for(msg: "SwarmMessage") -> str:
     """Topic a message should be published on. Directed messages require receiver_id."""
     pattern = ROUTES[msg.msg_type]
+    cluster_id = _cluster_id_for(msg)
+    if cluster_id is not None:
+        _validate_cluster_id(cluster_id)
+        if msg.msg_type is MessageType.LEADER_CLAIM:
+            pattern = "swarm/clusters/{cluster_id}/leader"
+        elif msg.msg_type is MessageType.TASK_ANNOUNCE:
+            pattern = "swarm/clusters/{cluster_id}/tasks/announce"
+        elif msg.msg_type is MessageType.TASK_BID:
+            pattern = "swarm/clusters/{cluster_id}/tasks/bids"
+    elif msg.msg_type is MessageType.CLUSTER_UPDATE:
+        raise ValueError("CLUSTER_UPDATE requires a cluster_id")
     if "{receiver}" in pattern and not msg.receiver_id:
         raise ValueError(f"{msg.msg_type} requires receiver_id")
-    return pattern.format(sender=msg.sender_id, receiver=msg.receiver_id)
+    return pattern.format(
+        sender=msg.sender_id,
+        receiver=msg.receiver_id,
+        cluster_id=cluster_id,
+    )
 
 
 def validate_pattern(pattern: str) -> None:
@@ -1897,6 +1990,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-08 | cluster coordination | Contracts 0.3.0: added cluster membership/lease snapshots, optional cluster identity and term fields, cluster update messages, and cluster-scoped routing for updates, leader claims, task announcements, and bids | Establish additive contract support for cluster-level swarm coordination |
 | 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; `training/composite.py` (synthetic fires on real No-Fire backgrounds, 6 tests); `training/label_tool.py` (hand-label hard band, 4 tests); `training/train_verifier.ipynb` (whole training loop); FLAME 3 cameras/gain/GSD from Table III; matplotlib + ipykernel in `[train]`; HIT-UAV/BIRDSAI ruled out (8-bit); CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
 | 2026-11-07 | perception chat (C) | decisions 0001 (ACCEPTED A) – 0004 in `docs/decisions/`; PatchSpec v2 scale-normalized patches; confirm/verify stage (`perception/confirm.py`, `evaluate_confirm.py`); precision-first confirm threshold; hot-blob bypass rule replaces 300 °C; sensor wiring (`frame_context.py`, `terrain.py`, `distortion.py`); seeker altimeter in §6.3; no contract changes | user decisions on altitude, bypass, sensors, confirm stage |
 | 2026-11-07 | perception chat (C) | added `training/check_masks.py` (mask audit), decision doc 0001 (altitude vs lidar, PROPOSED), §12 items 10–11 (altimeter gap, Boson+ saturation 350 °C vs config 550 °C) | follow-up questions on masks, lidar, hot-bypass |

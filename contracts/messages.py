@@ -17,14 +17,14 @@ from typing import Annotated, Literal, Union
 from pydantic import Field, model_validator
 
 from .base import CONTRACT_VERSION, FrozenContract
-from .entities import Alert, DroneState, GridCellUpdate, Hotspot, Task, WaterSource
+from .entities import Alert, ClusterId, ClusterSnapshot, DroneState, GridCellUpdate, Hotspot, Task, WaterSource
 from .enums import (
     CommandKind, ExtinguishingAgent, HotspotStatus, MessageType, RefillTargetKind, SimFaultKind,
 )
 from .geometry import GridSpec, Position
 
 __all__ = [
-    "Heartbeat", "HotspotReport", "WaterSourceReport", "MapSync", "TaskAnnounce", "TaskBid",
+    "Heartbeat", "HotspotReport", "WaterSourceReport", "MapSync", "ClusterUpdate", "TaskAnnounce", "TaskBid",
     "TaskAssign", "TaskAck", "TaskComplete", "PathClaim", "LeaderClaim", "RefillRequest",
     "RefillGrant", "GroundCommand", "AlertNotice", "SimFault",
     "Body", "BODY_TYPES", "QoSProfile", "DEFAULT_QOS", "SwarmMessage", "encode", "decode",
@@ -62,6 +62,13 @@ class MapSync(_Body):
     water_sources: list[WaterSource] = Field(default_factory=list)
 
 
+class ClusterUpdate(_Body):
+    """Cluster membership, leadership term, and zone ownership snapshot."""
+
+    type: Literal[MessageType.CLUSTER_UPDATE] = MessageType.CLUSTER_UPDATE
+    cluster: ClusterSnapshot
+
+
 class TaskAnnounce(_Body):
     """Leader offers a task for bidding (auction). Bids must arrive before bid_deadline."""
 
@@ -78,6 +85,8 @@ class TaskBid(_Body):
     feasible: bool = True      # False = "I cannot do this" (battery, water, range, agent mismatch)
     eta_s: float | None = Field(default=None, ge=0)
     energy_cost_pct: float | None = Field(default=None, ge=0, le=100)
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
 
 
 class TaskAssign(_Body):
@@ -131,6 +140,8 @@ class LeaderClaim(_Body):
     candidate_id: str
     epoch: int = Field(ge=0)
     score: float  # e.g. health + endurance + link quality; tie-break on candidate_id
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
 
 
 class RefillRequest(_Body):
@@ -184,7 +195,7 @@ class SimFault(_Body):
 
 Body = Annotated[
     Union[
-        Heartbeat, HotspotReport, WaterSourceReport, MapSync, TaskAnnounce, TaskBid, TaskAssign,
+        Heartbeat, HotspotReport, WaterSourceReport, MapSync, ClusterUpdate, TaskAnnounce, TaskBid, TaskAssign,
         TaskAck, TaskComplete, PathClaim, LeaderClaim, RefillRequest, RefillGrant, GroundCommand,
         AlertNotice, SimFault,
     ],
@@ -196,6 +207,7 @@ BODY_TYPES: dict[MessageType, type[_Body]] = {
     MessageType.HOTSPOT_REPORT: HotspotReport,
     MessageType.WATER_SOURCE_REPORT: WaterSourceReport,
     MessageType.MAP_SYNC: MapSync,
+    MessageType.CLUSTER_UPDATE: ClusterUpdate,
     MessageType.TASK_ANNOUNCE: TaskAnnounce,
     MessageType.TASK_BID: TaskBid,
     MessageType.TASK_ASSIGN: TaskAssign,
@@ -224,6 +236,7 @@ DEFAULT_QOS: dict[MessageType, QoSProfile] = {
     MessageType.HOTSPOT_REPORT: QoSProfile(reliable=True, ttl_s=60),
     MessageType.WATER_SOURCE_REPORT: QoSProfile(reliable=True, ttl_s=60),
     MessageType.MAP_SYNC: QoSProfile(reliable=False, ttl_s=10, rate_hz=1),
+    MessageType.CLUSTER_UPDATE: QoSProfile(reliable=True, ttl_s=15),
     MessageType.TASK_ANNOUNCE: QoSProfile(reliable=True, ttl_s=10),
     MessageType.TASK_BID: QoSProfile(reliable=True, ttl_s=10),
     MessageType.TASK_ASSIGN: QoSProfile(reliable=True, ttl_s=30),
