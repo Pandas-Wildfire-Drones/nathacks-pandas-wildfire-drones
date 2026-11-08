@@ -133,6 +133,13 @@ def bid_for_task(
         and drone.current_task_id is None
         and _kind_can_do(task, drone)
         and task.priority > 0.0
+        and (
+            task.cluster_id is None
+            or (
+                drone.cluster_id == task.cluster_id
+                and drone.cluster_epoch == task.cluster_epoch
+            )
+        )
     )
     eta_s = drone.position.distance_to(target) / cruise_speed_mps
     return_target = drone.position if return_position is None else return_position
@@ -163,6 +170,8 @@ def bid_for_task(
             if feasible and drone.endurance_remaining_s
             else None
         ),
+        cluster_id=task.cluster_id,
+        cluster_epoch=task.cluster_epoch,
     )
 
 
@@ -177,6 +186,8 @@ def allocate_tasks(
     cruise_speed_mps: float = 10.0,
     return_position: Position | None = None,
     travel_time_normalizer_s: float = DEFAULT_TRAVEL_TIME_NORMALIZER_S,
+    cluster_id: str | None = None,
+    cluster_epoch: int = 0,
 ) -> list[Task]:
     """Run one sequential single-item auction for each pending task.
 
@@ -187,6 +198,8 @@ def allocate_tasks(
     """
     if epoch < 0:
         raise ValueError("epoch must be >= 0")
+    if cluster_epoch < 0:
+        raise ValueError("cluster_epoch must be >= 0")
     if not math.isfinite(now):
         raise ValueError("now must be finite")
     if not math.isfinite(reserve_s) or reserve_s < 0:
@@ -199,8 +212,18 @@ def allocate_tasks(
     available_drones = [
         drone for drone in drones
         if drone.status is DroneStatus.IDLE and drone.current_task_id is None
+        and (
+            cluster_id is None
+            or (drone.cluster_id == cluster_id and drone.cluster_epoch == cluster_epoch)
+        )
     ]
-    pending_tasks = [task for task in tasks if task.status is TaskStatus.PENDING]
+    pending_tasks = [
+        task for task in tasks
+        if task.status is TaskStatus.PENDING
+        and (cluster_id is None or (
+            task.cluster_id == cluster_id and task.cluster_epoch == cluster_epoch
+        ))
+    ]
     pending_tasks.sort(key=lambda task: (-task.priority, task.created_at, task.task_id))
 
     assigned: list[Task] = []
@@ -231,6 +254,9 @@ def allocate_tasks(
         task_copy.status = TaskStatus.ASSIGNED
         task_copy.assigned_to = winner.bidder_id
         task_copy.epoch = epoch
+        if cluster_id is not None:
+            task_copy.cluster_id = cluster_id
+            task_copy.cluster_epoch = cluster_epoch
         assigned.append(task_copy)
         used_drone_ids.add(winner.bidder_id)
 
