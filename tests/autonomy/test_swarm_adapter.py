@@ -54,8 +54,8 @@ class FakeController:
             reason="Navigation requested",
         )
 
-    def step_extinguish(self, drone, hotspot, task):
-        self.step_calls.append((drone, hotspot, task))
+    def step_extinguish(self, drone, hotspot, task, *, altitude_agl_m):
+        self.step_calls.append((drone, hotspot, task, altitude_agl_m))
 
         from autonomy.drone_controller import MissionExecutionResult
 

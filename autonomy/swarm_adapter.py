@@ -8,9 +8,10 @@ local execution safety.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from autonomy.deconfliction import Conflict, detect_conflicts
 from autonomy.drone_controller import DroneController, MissionExecutionResult
 from autonomy.health_manager import evaluate_drone_health
 from contracts.entities import Alert, DroneState, Hotspot, Task
@@ -30,13 +31,18 @@ from contracts.topics import topic_for
 
 @dataclass
 class SwarmAutonomyState:
-    """Local state retained by one drone's autonomy adapter."""
+    """Local state retained by one autonomous drone."""
 
     current_task: Task | None = None
     current_hotspot: Hotspot | None = None
     latest_heartbeat: Heartbeat | None = None
     latest_refill_grant: RefillGrant | None = None
     latest_path_claim: PathClaim | None = None
+
+    # Path claims belonging to other drones are retained separately from
+    # this drone's own claim. Local autonomy uses these claims only for
+    # deconfliction; they do not grant permission to modify another drone.
+    remote_path_claims: list[PathClaim] = field(default_factory=list)
 
 
 class SwarmAutonomyAdapter:
@@ -57,9 +63,7 @@ class SwarmAutonomyAdapter:
         self.controller = controller
         self.bus = bus
 
-        # The adapter currently receives time through the DroneState contract.
-        # This keeps the integration API compatible with the existing swarm
-        # tests while still giving generated alerts/messages a valid timestamp.
+        # The adapter receives time through the DroneState contract.
         self.now = drone.timestamp
 
         self.state = SwarmAutonomyState()
@@ -208,10 +212,14 @@ class SwarmAutonomyAdapter:
 
         health = evaluate_drone_health(self.drone)
 
-        # Health is a hard safety gate. It happens before mission execution.
+        # Health is the highest local safety gate. A lower-level mission
+        # objective cannot override an unsafe drone state.
         if not health.safe:
             if self.controller.autopilot is not None:
-                self.controller.autopilot.hold()
+                if health.action == "RETURN":
+                    self.controller.autopilot.return_to_launch()
+                else:
+                    self.controller.autopilot.hold()
 
             self._publish_alert(
                 None,
@@ -222,16 +230,45 @@ class SwarmAutonomyAdapter:
         if task.type is not TaskType.EXTINGUISH:
             return None
 
+        # DroneState.position.z is the local altitude reference used by
+        # the existing contract. The controller's drop limits are applied
+        # immediately before release.
+        altitude_agl_m = max(0.0, float(self.drone.position.z))
+
         result = self.controller.step_extinguish(
             self.drone,
             hotspot,
             task,
+            altitude_agl_m=altitude_agl_m,
         )
 
         if result.status in ("DONE", "FAILED", "REJECTED"):
             self._publish_task_complete(task, result)
 
         return result
+
+    def check_path_conflicts(
+        self,
+        proposed_path: list,
+        minimum_separation_m: float,
+    ) -> list[Conflict]:
+        """Check a proposed local path against active remote path claims.
+
+        Path claims are advisory coordination data. They never override
+        local health, mission, or resource safety.
+        """
+
+        other_paths = [
+            claim.waypoints
+            for claim in self.state.remote_path_claims
+            if self._claim_is_current(claim)
+        ]
+
+        return detect_conflicts(
+            proposed_path,
+            other_paths,
+            minimum_separation_m,
+        )
 
     def handle_heartbeat(
         self,
@@ -275,10 +312,25 @@ class SwarmAutonomyAdapter:
         message: SwarmMessage,
         claim: PathClaim,
     ) -> None:
-        """Record path information relevant to local deconfliction."""
+        """Record a path claim for local deconfliction."""
 
         if claim.drone_id == self.drone.drone_id:
             self.state.latest_path_claim = claim
+            return
+
+        # Replace a previous claim from the same drone so the local
+        # deconfliction view contains only its latest known route.
+        self.state.remote_path_claims = [
+            existing
+            for existing in self.state.remote_path_claims
+            if existing.drone_id != claim.drone_id
+        ]
+        self.state.remote_path_claims.append(claim)
+
+    def _claim_is_current(self, claim: PathClaim) -> bool:
+        """Return whether a remote claim overlaps the adapter's current time."""
+
+        return claim.valid_from <= self.now <= claim.valid_until
 
     def _find_hotspot(self, hotspot_id: str | None) -> Hotspot | None:
         if hotspot_id is None:

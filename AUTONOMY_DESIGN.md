@@ -546,3 +546,122 @@ Phase 3 integration tests verify:
 - assignments for another drone are ignored;
 - autonomy alerts satisfy the exact shared `Alert` contract;
 - refill messages for another drone do not alter local refill state.
+
+## Phase 4: Failure and Safety Integration
+
+Phase 4 integrates the existing per-drone mission controller with higher-level
+health and swarm-safety constraints. The goal is that a mission action cannot
+continue merely because the task is valid; the drone must also be healthy and
+able to operate safely.
+
+### Health gate
+
+The swarm autonomy adapter evaluates drone health before attempting mission
+execution.
+
+The health hierarchy is:
+
+1. LOST: mission execution is blocked.
+2. FAULT: mission execution is blocked and the drone enters the conservative
+   hold/return handling defined by the adapter.
+3. Sensor failure: mission execution is blocked and the drone holds.
+4. Degraded communication link: mission execution is blocked and the drone
+   returns to launch.
+5. Healthy: mission execution may continue to the mission controller.
+
+The degraded-link threshold is provided by the health manager rather than
+invented inside the swarm adapter. A link quality below the configured
+minimum is therefore treated as unsafe for continued autonomous mission
+execution.
+
+### Path-claim integration
+
+The swarm adapter keeps the latest valid path claim from remote drones and
+checks proposed paths against those active remote claims.
+
+A remote claim is considered current only while:
+
+    valid_from <= current_time <= valid_until
+
+Expired claims are ignored rather than treated as permanent obstacles.
+
+Conflict detection remains delegated to the existing 3D deconfliction module.
+The adapter therefore owns message/state integration while the deconfliction
+module owns the geometric conflict calculation.
+
+### Mission validity remains separate from health
+
+After the health gate passes, the adapter still delegates mission validity and
+water-drop safety to the existing DroneController.
+
+This preserves the safety hierarchy:
+
+    health / hard safety
+        -> mission validity
+        -> resource safety
+        -> path / deconfliction
+        -> mission action
+
+A valid task therefore cannot override an unhealthy drone state.
+
+### Altitude safety input
+
+The adapter supplies the drone's current altitude to the mission controller
+as altitude_agl_m when executing an extinguish step. The existing controller
+uses this value as part of the final water-drop safety gate.
+
+The current simulation/contract convention represents altitude using the
+Position z component. No additional terrain or elevation model is introduced
+because that information is not part of the current authoritative autonomy
+contract.
+
+### Failure behavior
+
+The adapter deliberately prevents mission execution when safety prerequisites
+fail. It does not fabricate a successful mission completion or release water
+when the health gate rejects execution.
+
+For degraded communications, the current deterministic behavior is return to
+launch. For sensor failure and the conservative FAULT/LOST handling, the
+adapter holds the drone unless the health decision explicitly requests
+return.
+
+These behaviors are local autonomy decisions and are kept separate from the
+swarm-level decision of how the overall mission should be reassigned.
+
+### Task completion
+
+Terminal mission results (DONE, FAILED, or REJECTED) are converted into the
+existing TaskComplete swarm message.
+
+The MissionExecutionResult contract does not contain a HotspotStatus result
+field, so TaskComplete uses result_status=None rather than inventing a status.
+
+### Test coverage
+
+Phase 4 integration tests verify:
+
+- healthy mission execution reaches the controller;
+- degraded communication blocks mission execution;
+- failed sensors block mission execution;
+- LOST drones cannot continue the mission;
+- FAULT drones cannot continue the mission;
+- active remote path claims are checked for conflicts;
+- expired remote path claims do not create stale conflicts;
+- terminal mission results publish TaskComplete;
+- the adapter passes altitude safety information into mission execution.
+
+The test suite passes with all existing autonomy and swarm integration tests.
+
+### Ownership boundary
+
+The swarm autonomy adapter owns swarm-message integration, local state
+synchronization, health gating, and translation between swarm contracts and
+the per-drone controller.
+
+The DroneController owns executable mission sequencing and final water-drop
+safety.
+
+The individual safety managers remain responsible for their specific
+decisions. Phase 4 therefore integrates the safety layers without replacing
+or duplicating their logic.
