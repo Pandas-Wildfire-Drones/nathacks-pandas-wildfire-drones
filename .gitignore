@@ -1,15 +1,15 @@
-
 # Python bytecode and test caches
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
+.ruff_cache/
 
-# Python bytecode and test caches
-__pycache__/
-*.py[cod]
-.pytest_cache/
+# Virtual environment
+.venv/
 
-# Python bytecode and test caches
-__pycache__/
-*.py[cod]
-.pytest_cache/
+# Local-only: datasets, Colab scratch, training runs and checkpoints (never commit data)
+exclude/
+
+# Claude local configuration
+.claude
