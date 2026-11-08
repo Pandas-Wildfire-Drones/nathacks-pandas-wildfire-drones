@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil
 
 from autonomy.cbs_planner import PathRequest, path_duration_s, plan_paths
@@ -226,6 +226,22 @@ class MissionCoordinator:
                 resource_assessment=preliminary,
             )
 
+        planned_waypoints = list(planned.plan.waypoints)
+        if planned_waypoints[-1] != hotspot.position:
+            planned_waypoints.append(hotspot.position)
+            planned = MissionPlanningResult(
+                accepted=True,
+                reason=planned.reason,
+                plan=replace(
+                    planned.plan,
+                    waypoints=planned_waypoints,
+                    duration_s=(
+                        planned.plan.duration_s + context.time_step_s
+                    ),
+                ),
+                resource_assessment=planned.resource_assessment,
+            )
+
         route_distance_m = sum(
             first.distance_to(second)
             for first, second in zip(
@@ -423,6 +439,14 @@ class MissionCoordinator:
 
         if plan.drone_id != self.drone.drone_id:
             return None
+
+        if altitude_band_m is not None and any(
+            not altitude_band_m[0] <= waypoint.z <= altitude_band_m[1]
+            for waypoint in plan.waypoints
+        ):
+            raise ValueError(
+                "Planned route leaves the assigned altitude band"
+            )
 
         route_start = (
             self.drone.timestamp if valid_from is None else valid_from

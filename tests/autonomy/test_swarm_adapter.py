@@ -54,8 +54,17 @@ class FakeController:
     def _hold(self):
         self.autopilot.hold_calls += 1
 
-    def begin_extinguish(self, drone, hotspot, task, cruise_speed_mps=None):
-        self.begin_calls.append((drone, hotspot, task, cruise_speed_mps))
+    def begin_extinguish(
+        self,
+        drone,
+        hotspot,
+        task,
+        cruise_speed_mps=None,
+        planned_path=None,
+    ):
+        self.begin_calls.append(
+            (drone, hotspot, task, cruise_speed_mps, planned_path)
+        )
 
         from autonomy.drone_controller import MissionExecutionResult
 
@@ -188,6 +197,12 @@ def test_task_assign_for_this_drone_starts_mission():
 
     assert result.status == "TRANSIT"
     assert len(controller.begin_calls) == 1
+    claim = next(
+        message.body
+        for topic, message in bus.published
+        if topic == "swarm/path_claims"
+    )
+    assert controller.begin_calls[0][4] == claim.waypoints
 
 
 def test_task_assign_for_another_drone_is_ignored():

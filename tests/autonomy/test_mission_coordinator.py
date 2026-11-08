@@ -1,6 +1,6 @@
 import pytest
 
-from autonomy.mission_coordinator import MissionCoordinator
+from autonomy.mission_coordinator import MissionCoordinator, MissionPlan
 from autonomy.path_claim_manager import PathClaimManager
 from contracts.entities import DroneState, Task
 from contracts.enums import (
@@ -214,3 +214,27 @@ def test_coordinator_publishes_cbs_plan_as_claim():
     assert message.body.waypoints == result.plan.waypoints
     assert bus.published
     assert bus.published[0][0] == "swarm/path_claims"
+
+
+def test_coordinator_rejects_route_outside_assigned_altitude_band():
+    drone = make_drone()
+    coordinator = MissionCoordinator(
+        drone,
+        PathClaimManager(FakeBus()),
+    )
+    plan = MissionPlan(
+        task_id="task-1",
+        drone_id="d1",
+        waypoints=[Position(x=0.5, y=0.5, z=10)],
+        duration_s=1,
+        time_step_s=1,
+        water_required_l=0,
+    )
+
+    with pytest.raises(ValueError, match="assigned altitude band"):
+        coordinator.publish_plan(
+            plan,
+            other_claims=[],
+            minimum_separation_m=1,
+            altitude_band_m=(20, 30),
+        )

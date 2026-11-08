@@ -328,6 +328,7 @@ class SwarmAutonomyAdapter:
                 hotspot,
                 task,
                 cruise_speed_mps=context.platform_spec.cruise_speed_mps,
+                planned_path=planning.plan.waypoints,
             )
         except (ValueError, RuntimeError) as exc:
             self._publish_alert(message, str(exc))
@@ -498,7 +499,7 @@ class SwarmAutonomyAdapter:
         max_cbs_nodes: int = 100,
         max_timesteps: int = 500,
     ) -> dict[str, list[Position]] | None:
-        """Delegate invalidated route groups to the existing local replanner."""
+        """Plan invalidated groups; callers must publish before activation."""
 
         routes = replan_conflict_groups(
             requests,

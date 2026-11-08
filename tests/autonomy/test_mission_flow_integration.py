@@ -22,10 +22,10 @@ from contracts.messages import PathClaim, SwarmMessage, TaskAssign, TaskComplete
 
 
 class FakeBus:
-    def __init__(self):
+    def __init__(self, events=None):
         self.published = []
         self.subscriptions = []
-        self.events = []
+        self.events = events if events is not None else []
 
     def subscribe(self, pattern, handler):
         self.subscriptions.append((pattern, handler))
@@ -40,6 +40,7 @@ class FakeAutopilot:
     def __init__(self, events):
         self.events = events
         self.arrived = False
+        self.goto_targets = []
         self.hold_calls = 0
         self.return_calls = 0
 
@@ -59,6 +60,7 @@ class FakeAutopilot:
         return 3600
 
     def goto(self, target, speed_mps=None):
+        self.goto_targets.append(target)
         self.events.append("begin_extinguish")
 
     def hold(self):
@@ -202,7 +204,7 @@ def make_assignment(task=None):
 
 def test_assignment_publishes_cbs_claim_before_controller_transit():
     events = []
-    bus = FakeBus()
+    bus = FakeBus(events)
     adapter, _, _, autopilot, _ = make_adapter(
         bus=bus,
         events=events,
@@ -211,8 +213,7 @@ def test_assignment_publishes_cbs_claim_before_controller_transit():
     result = adapter.handle_message(make_assignment())
 
     assert result.status == "TRANSIT"
-    assert bus.events == ["path_claim"]
-    assert events == ["begin_extinguish"]
+    assert events[:2] == ["path_claim", "begin_extinguish"]
     claim = next(
         message.body
         for topic, message in bus.published
@@ -220,9 +221,9 @@ def test_assignment_publishes_cbs_claim_before_controller_transit():
     )
     assert isinstance(claim, PathClaim)
     assert claim.waypoints[0] == Position(x=0, y=0, z=25)
-    assert claim.waypoints[-1] == Position(x=12, y=10, z=25)
+    assert claim.waypoints[-1] == make_hotspot().position
     assert claim.altitude_band_m == (20, 30)
-    assert autopilot.events == ["begin_extinguish"]
+    assert autopilot.goto_targets == [claim.waypoints[0]]
 
 
 @pytest.mark.parametrize(
@@ -374,10 +375,27 @@ def test_successful_mission_reaches_drop_and_publishes_task_complete():
     result = adapter.handle_message(make_assignment())
     assert result.status == "TRANSIT"
 
-    autopilot.arrived = True
-    result = adapter.step()
+    claim = next(
+        message.body
+        for topic, message in bus.published
+        if topic == "swarm/path_claims"
+    )
+    assert isinstance(claim, PathClaim)
+    assert autopilot.goto_targets == [claim.waypoints[0]]
+    assert payload.release_calls == []
 
+    for _ in claim.waypoints[1:]:
+        autopilot.arrived = True
+        result = adapter.step()
+        assert autopilot.goto_targets == claim.waypoints[
+            : len(autopilot.goto_targets)
+        ]
+        assert result.status == "TRANSIT"
+        assert payload.release_calls == []
+
+    result = adapter.step()
     assert result.status == "DONE"
+    assert autopilot.goto_targets == claim.waypoints
     assert payload.release_calls
     completes = [
         message.body
@@ -391,7 +409,8 @@ def test_successful_mission_reaches_drop_and_publishes_task_complete():
 def test_missing_agl_measurement_blocks_final_release():
     adapter, bus, _, autopilot, payload = make_adapter()
     adapter.altitude_agl_provider = None
-    adapter.state.current_task = make_task()
+    result = adapter.handle_message(make_assignment())
+    assert result.status == "TRANSIT"
     autopilot.arrived = True
 
     result = adapter.step()

@@ -51,6 +51,8 @@ class DroneController:
 
         self._active_task_id: str | None = None
         self._terminal_result: MissionExecutionResult | None = None
+        self._active_path: tuple[Position, ...] | None = None
+        self._path_index = 0
 
     @property
     def ready_for_mission(self) -> bool:
@@ -193,6 +195,7 @@ class DroneController:
         hotspot: Hotspot,
         task: Task,
         cruise_speed_mps: float | None = None,
+        planned_path: list[Position] | None = None,
     ) -> MissionExecutionResult:
         """
         Start an extinguishing mission.
@@ -267,11 +270,17 @@ class DroneController:
                 "Hotspot is not confirmed for extinguishing"
             )
 
+        if planned_path is not None and not planned_path:
+            raise ValueError("Planned path must contain at least one waypoint")
+
+        active_path = tuple(planned_path) if planned_path is not None else None
         self.autopilot.goto(
-            hotspot.position,
+            active_path[0] if active_path is not None else hotspot.position,
             speed_mps=cruise_speed_mps,
         )
 
+        self._active_path = active_path
+        self._path_index = 0
         self._active_task_id = task.task_id
 
         return MissionExecutionResult(
@@ -314,6 +323,8 @@ class DroneController:
             )
 
             self._active_task_id = None
+            self._active_path = None
+            self._path_index = 0
             return result
 
         # Once a mission has completed, return the exact same terminal
@@ -328,6 +339,38 @@ class DroneController:
                 water_used_l=0.0,
                 reason="No active mission for this task",
             )
+
+        if self._active_path is not None:
+            if not self.autopilot.at_target():
+                return MissionExecutionResult(
+                    status="TRANSIT",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Drone has not reached the current route waypoint",
+                )
+
+            if self._path_index + 1 < len(self._active_path):
+                next_index = self._path_index + 1
+                self.autopilot.goto(
+                    self._active_path[next_index],
+                )
+                self._path_index = next_index
+                return MissionExecutionResult(
+                    status="TRANSIT",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Continuing along the planned route",
+                )
+
+            if self._active_path[-1] != hotspot.position:
+                self._active_path = None
+                self.autopilot.goto(hotspot.position)
+                return MissionExecutionResult(
+                    status="TRANSIT",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Approaching the hotspot from the planned route",
+                )
 
         # Do not release while the drone is still travelling.
         if not self.autopilot.at_target(
@@ -360,6 +403,8 @@ class DroneController:
 
             self._terminal_result = result
             self._active_task_id = None
+            self._active_path = None
+            self._path_index = 0
 
             return result
 
@@ -383,6 +428,8 @@ class DroneController:
 
             self._terminal_result = result
             self._active_task_id = None
+            self._active_path = None
+            self._path_index = 0
 
             return result
 
@@ -395,5 +442,7 @@ class DroneController:
 
         self._terminal_result = result
         self._active_task_id = None
+        self._active_path = None
+        self._path_index = 0
 
         return result
