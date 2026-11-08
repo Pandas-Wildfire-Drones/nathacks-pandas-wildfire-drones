@@ -1869,6 +1869,9 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-07 | swarm workstream | Added bus-backed leader failover/hold coordination, task ACK/completion lifecycle management, and nearest-compatible refill assignment | Close the orchestration gaps in workstream A while keeping transport simulation and flight actions behind their existing interfaces |
+| 2026-11-07 | swarm workstream | Implemented scored failover election, weighted hotspot priorities, deadline-bounded SSI rounds with normalized priority bids, bus messaging, and multi-heartbeat failure handling in `swarm/` | Start workstream A against the v0.2 contracts |
+| 2026-11-07 | swarm workstream | Added status-based hotspot-to-task creation and a clock-driven bus auction coordinator/bid responder | Complete swarm-owned task creation and bus auction flow against the existing contracts |
 | 2026-11-07 | follow-up chat | v0.2 / contracts 0.2.0: ultra-heavy hybrid extinguisher (800 kg MTOW, 170 L, 210 kg fuel), electric 10 kg seeker, trimmed extinguisher sensors, fuel/generator telemetry, refuel in refill, partial drops, sizing script; basin math redone with fuel (56 tests) | team decision: FireSwarm-style extinguisher, electric seekers |
 | 2026-11-07 | initial chat | Created context v0.1 and contracts 0.1.0 (49 tests passing); sensor baseline reviewed against FireSwarm; added agents, refill/basin, gas-sensing and ML-data sections | project kickoff for parallel work |
 

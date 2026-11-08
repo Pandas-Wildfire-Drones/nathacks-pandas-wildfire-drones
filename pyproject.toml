@@ -13,7 +13,7 @@ dependencies = ["pydantic>=2.6"]
 dev = ["pytest>=8"]
 
 [tool.setuptools]
-packages = ["contracts"]
+packages = ["contracts", "swarm"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
