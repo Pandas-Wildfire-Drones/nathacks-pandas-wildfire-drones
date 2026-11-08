@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ================================================================================
-PX4 + GAZEBO SITL AUTONOMOUS MISSION RUNNER (MAVSDK 4 COMPATIBLE)
+PX4 + GAZEBO SITL AUTONOMOUS MISSION RUNNER (MAVSDK 4 NATIVE)
 ================================================================================
 File: run_gazebo_mission.py
 """
@@ -23,23 +23,20 @@ try:
     print("[+] Detected Native MAVSDK v4.0+")
 except Exception:
     try:
-        # 2. Legacy / gRPC MAVSDK (pip install mavsdk-grpc or mavsdk < 4)
         from mavsdk import System
         from mavsdk.offboard import (OffboardError, VelocityNedYaw)
         IS_MAVSDK_V4 = False
-        print("[+] Detected MAVSDK legacy/gRPC")
     except Exception:
         import mavsdk_grpc as mavsdk
         from mavsdk_grpc import System
         from mavsdk_grpc.offboard import (OffboardError, VelocityNedYaw)
         IS_MAVSDK_V4 = False
-        print("[+] Detected mavsdk-grpc")
 
 # Import YOUR custom algorithm class from my_avoidance_algorithm.py
 from my_avoidance_algorithm import MyAutonomousAlgorithm
 
 # Mission Configuration
-CONNECTION_URL = "udpin://0.0.0.0:14540"  # Standard MAVSDK 4 UDP connection string
+CONNECTION_URL = "udpin://0.0.0.0:14540"
 CRUISE_ALTITUDE = 15.0
 CRUISE_SPEED = 6.0
 SAFETY_MARGIN = 6.0
@@ -53,7 +50,6 @@ WILDFIRE_TARGETS = [
 
 class GazeboMissionRunner:
     def __init__(self):
-        # Instantiate your custom algorithm!
         self.algorithm = MyAutonomousAlgorithm(
             safety_margin_m=SAFETY_MARGIN,
             max_speed_mps=CRUISE_SPEED
@@ -63,7 +59,6 @@ class GazeboMissionRunner:
         self.forward_dist = 25.0
         self.lidar_ranges = [25.0] * 16
 
-        # Plugin references for MAVSDK v4
         self.mavsdk = None
         self.drone = None
         self.action = None
@@ -75,7 +70,6 @@ class GazeboMissionRunner:
         print(f"[*] Initializing connection to PX4 Gazebo SITL on {CONNECTION_URL}...")
 
         if IS_MAVSDK_V4:
-            # Native MAVSDK v4 initialization
             config = Configuration.create_with_component_type(ComponentType.GROUND_STATION)
             self.mavsdk = Mavsdk(config)
             await self.mavsdk.add_any_connection(CONNECTION_URL)
@@ -84,7 +78,6 @@ class GazeboMissionRunner:
             self.drone = await self.mavsdk.first_autopilot(15.0)
             if self.drone is None:
                 print("[!] Timeout: No PX4 autopilot detected in Gazebo SITL.")
-                print("    Make sure Gazebo is running with: make px4_sitl gazebo-classic")
                 sys.exit(1)
 
             print("[+] Successfully discovered PX4 Autopilot in Gazebo!")
@@ -92,44 +85,70 @@ class GazeboMissionRunner:
             self.offboard = OffboardAsync(self.drone)
             self.telemetry = TelemetryAsync(self.drone)
         else:
-            # Legacy gRPC MAVSDK fallback
             self.drone = System()
             await self.drone.connect(system_address="udp://:14540")
-            print("[*] Waiting for drone connection state...")
             async for state in self.drone.core.connection_state():
                 if state.is_connected:
-                    print(f"[+] Connected to PX4 in Gazebo! System: {state}")
                     break
             self.action = self.drone.action
             self.offboard = self.drone.offboard
             self.telemetry = self.drone.telemetry
 
     async def start_telemetry(self):
-        """Streams real-time position, attitude, and simulated LIDAR distance sensor"""
-        asyncio.create_task(self._listen_position())
-        asyncio.create_task(self._listen_attitude())
-        asyncio.create_task(self._listen_distance_sensor())
+        """Streams real-time position, attitude, and distance sensor to algorithm"""
+        asyncio.create_task(self._telemetry_poll_loop())
 
-    async def _listen_position(self):
-        async for pos in self.telemetry.position_velocity_ned():
-            p = pos.position
-            self.current_pos_ned = (p.north_m, p.east_m, p.down_m)
+    async def _telemetry_poll_loop(self):
+        """Polls telemetry at 20 Hz without crashing on MAVSDK v4 coroutines"""
+        while True:
+            try:
+                # 1. Position
+                pos_call = self.telemetry.position_velocity_ned()
+                pos = await pos_call if asyncio.iscoroutine(pos_call) else pos_call
+                p = getattr(pos, 'position', pos)
+                self.current_pos_ned = (
+                    getattr(p, 'north_m', self.current_pos_ned[0]),
+                    getattr(p, 'east_m', self.current_pos_ned[1]),
+                    getattr(p, 'down_m', self.current_pos_ned[2])
+                )
+            except Exception:
+                pass
 
-    async def _listen_attitude(self):
-        async for att in self.telemetry.attitude_euler():
-            self.current_attitude = (att.roll_deg, att.pitch_deg, att.yaw_deg)
+            try:
+                # 2. Attitude
+                att_call = self.telemetry.attitude_euler()
+                att = await att_call if asyncio.iscoroutine(att_call) else att_call
+                self.current_attitude = (
+                    getattr(att, 'roll_deg', self.current_attitude[0]),
+                    getattr(att, 'pitch_deg', self.current_attitude[1]),
+                    getattr(att, 'yaw_deg', self.current_attitude[2])
+                )
+            except Exception:
+                pass
 
-    async def _listen_distance_sensor(self):
-        async for dist in self.telemetry.distance_sensor():
-            self.forward_dist = dist.current_distance_m
+            try:
+                # 3. Distance Sensor
+                dist_call = self.telemetry.distance_sensor()
+                dist = await dist_call if asyncio.iscoroutine(dist_call) else dist_call
+                self.forward_dist = getattr(dist, 'current_distance_m', self.forward_dist)
+            except Exception:
+                pass
+
+            await asyncio.sleep(0.05)  # 20 Hz update rate
 
     async def takeoff(self):
         """Arms drone and takes off to cruise altitude"""
         print("[*] Waiting for GPS lock in Gazebo...")
-        async for health in self.telemetry.health():
-            if health.is_global_position_ok and health.is_home_position_ok:
-                print("[+] GPS 3D fix locked in Gazebo world.")
-                break
+        for _ in range(30):
+            try:
+                health_call = self.telemetry.health()
+                health = await health_call if asyncio.iscoroutine(health_call) else health_call
+                if getattr(health, 'is_global_position_ok', False) or getattr(health, 'is_home_position_ok', False):
+                    print("[+] GPS 3D fix locked in Gazebo world.")
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
 
         print("[*] Arming motors...")
         await self.action.arm()
@@ -141,7 +160,6 @@ class GazeboMissionRunner:
 
     async def run_autonomous_loop(self):
         """Main offboard loop feeding data into YOUR algorithm at 10 Hz"""
-        # Send initial setpoint before starting offboard mode (required by PX4)
         await self.offboard.set_velocity_ned(VelocityNedYaw(0.0, 0.0, 0.0, 0.0))
         try:
             await self.offboard.start()
@@ -175,7 +193,6 @@ class GazeboMissionRunner:
                     await self.deploy_payload()
                     break
 
-                # Check if arrived at goal
                 if vn == 0.0 and ve == 0.0:
                     print(f"[+] Reached position above {t_id}!")
                     break
