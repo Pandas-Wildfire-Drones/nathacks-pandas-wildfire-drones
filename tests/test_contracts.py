@@ -6,7 +6,8 @@ from pydantic import ValidationError
 
 from contracts import (
     BODY_TYPES, DEFAULT_AGENT_SPECS, DEFAULT_QOS, ROUTES, SENSOR_NAMES,
-    Alert, AlertKind, AlertNotice, Autopilot, Bus, CameraModel, Clock, CommandKind, Detection,
+    Alert, AlertKind, AlertNotice, Autopilot, Bus, CameraModel, Clock, ClusterSnapshot, ClusterUpdate,
+    CommandKind, Detection,
     DetectorKind, DroneKind, DroneState, DroneStatus, ExtinguishingAgent, GridCellUpdate,
     GridIndex, GridSpec, GroundCommand, Heartbeat, Hotspot, HotspotReport, HotspotStatus,
     LeaderClaim, MapSync, MessageType, PathClaim, Position, RefillGrant, RefillRequest,
@@ -55,6 +56,17 @@ def all_bodies():
         MessageType.WATER_SOURCE_REPORT: WaterSourceReport(source=source()),
         MessageType.MAP_SYNC: MapSync(grid=grid, seq=3, cells=[GridCellUpdate(row=1, col=2, log_odds=2.0, last_seen=9.0)],
                                       hotspots=[hotspot()], water_sources=[source()]),
+        MessageType.CLUSTER_UPDATE: ClusterUpdate(
+            cluster=ClusterSnapshot(
+                cluster_id="north",
+                leader_id="d01",
+                cluster_epoch=1,
+                member_ids=["d01", "d02"],
+                zone_ids=["z1"],
+                updated_at=1.0,
+                lease_until=5.0,
+            )
+        ),
         MessageType.TASK_ANNOUNCE: TaskAnnounce(task=task(), bid_deadline=8.0),
         MessageType.TASK_BID: TaskBid(task_id="t1", bidder_id="d02", cost=12.3, eta_s=40.0),
         MessageType.TASK_ASSIGN: TaskAssign(task=task(), epoch=2),
@@ -185,6 +197,46 @@ def test_zone_contains():
         Zone(zone_id="z", boundary=[pos(0, 0), pos(1, 1)])
 
 
+def test_cluster_snapshot_validates_membership_and_lease():
+    snapshot = ClusterSnapshot(
+        cluster_id="north",
+        leader_id="d01",
+        cluster_epoch=2,
+        member_ids=["d01", "d02"],
+        zone_ids=["z1"],
+        updated_at=10.0,
+        lease_until=15.0,
+    )
+    assert snapshot.leader_id in snapshot.member_ids
+    with pytest.raises(ValidationError):
+        ClusterSnapshot(
+            cluster_id="north",
+            leader_id="d99",
+            cluster_epoch=2,
+            member_ids=["d01"],
+            updated_at=10.0,
+            lease_until=15.0,
+        )
+    with pytest.raises(ValidationError):
+        ClusterSnapshot(
+            cluster_id="north",
+            leader_id="d01",
+            cluster_epoch=2,
+            member_ids=["d01", "d01"],
+            updated_at=10.0,
+            lease_until=15.0,
+        )
+    with pytest.raises(ValidationError):
+        ClusterSnapshot(
+            cluster_id="north",
+            leader_id="d01",
+            cluster_epoch=2,
+            member_ids=["d01"],
+            updated_at=15.0,
+            lease_until=15.0,
+        )
+
+
 def test_refill_station_bays():
     with pytest.raises(ValidationError):
         RefillStation(station_id="s", position=pos(), water_available_l=1, fill_rate_lpm=10,
@@ -262,6 +314,56 @@ def test_directed_messages_need_receiver():
         topic_for(assign)
     directed = SwarmMessage.create("d01", all_bodies()[MessageType.TASK_ASSIGN], now=0.0, receiver_id="d05")
     assert topic_for(directed) == sub_my_commands("d05")
+
+
+def test_cluster_messages_route_to_cluster_scoped_topics():
+    snapshot = ClusterSnapshot(
+        cluster_id="north",
+        leader_id="d01",
+        cluster_epoch=2,
+        member_ids=["d01"],
+        updated_at=1.0,
+        lease_until=5.0,
+    )
+    update = SwarmMessage.create("d01", ClusterUpdate(cluster=snapshot), now=1.0)
+    claim = SwarmMessage.create(
+        "d01",
+        LeaderClaim(candidate_id="d01", epoch=2, score=0.9, cluster_id="north", cluster_epoch=2),
+        now=1.0,
+    )
+    announce = SwarmMessage.create(
+        "d01",
+        TaskAnnounce(task=task().model_copy(update={"cluster_id": "north"}), bid_deadline=3.0),
+        now=1.0,
+    )
+    bid = SwarmMessage.create(
+        "d02",
+        TaskBid(task_id="t1", bidder_id="d02", cost=0.2, cluster_id="north", cluster_epoch=2),
+        now=1.0,
+    )
+
+    assert topic_for(update) == "swarm/clusters/north/state"
+    assert topic_for(claim) == "swarm/clusters/north/leader"
+    assert topic_for(announce) == "swarm/clusters/north/tasks/announce"
+    assert topic_for(bid) == "swarm/clusters/north/tasks/bids"
+
+
+def test_unscoped_messages_keep_existing_topics_and_cluster_ids_are_safe():
+    announce = SwarmMessage.create(
+        "d01",
+        TaskAnnounce(task=task(), bid_deadline=3.0),
+        now=1.0,
+    )
+    assert topic_for(announce) == "swarm/tasks/announce"
+    with pytest.raises(ValidationError):
+        ClusterSnapshot(
+            cluster_id="north/zone",
+            leader_id="d01",
+            cluster_epoch=0,
+            member_ids=["d01"],
+            updated_at=1.0,
+            lease_until=2.0,
+        )
 
 
 # ---------- config ----------

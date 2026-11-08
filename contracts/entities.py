@@ -11,6 +11,8 @@ Design notes
 """
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import Field, model_validator
 
 from .base import Contract, FrozenContract
@@ -21,9 +23,11 @@ from .enums import (
 from .geometry import Position, point_in_polygon
 
 __all__ = [
-    "DroneState", "Hotspot", "Zone", "Task", "WaterSource", "RefillStation",
+    "ClusterId", "ClusterSnapshot", "DroneState", "Hotspot", "Zone", "Task", "WaterSource", "RefillStation",
     "GridCellUpdate", "Alert",
 ]
+
+ClusterId = Annotated[str, Field(min_length=1, pattern=r"^[^/#*+\s]+$")]
 
 
 class DroneState(Contract):
@@ -48,6 +52,8 @@ class DroneState(Contract):
     current_task_id: str | None = None
     leader_id: str | None = None   # who this drone currently believes is leader
     epoch: int = Field(default=0, ge=0)  # leader epoch this drone believes in
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
     # Health flags keyed by sensor/subsystem name, e.g. {"thermal": True, "lidar": True,
     # "gnss_rtk": False, "comms": True, "payload": True}. Names are defined in config.py (SENSOR_NAMES).
     sensors_ok: dict[str, bool] = Field(default_factory=dict)
@@ -94,9 +100,38 @@ class Zone(Contract):
     boundary: list[Position] = Field(min_length=3)  # polygon in local x/y
     assigned_to: str | None = None
     last_scanned: float | None = None
+    cluster_id: ClusterId | None = None
 
     def contains(self, pos: Position) -> bool:
         return point_in_polygon(pos.x, pos.y, self.boundary)
+
+
+class ClusterSnapshot(FrozenContract):
+    """Versioned membership and zone ownership view published by a cluster leader."""
+
+    cluster_id: ClusterId
+    leader_id: str = Field(min_length=1)
+    cluster_epoch: int = Field(ge=0)
+    member_ids: list[str] = Field(min_length=1)
+    zone_ids: list[str] = Field(default_factory=list)
+    updated_at: float = Field(allow_inf_nan=False)
+    lease_until: float = Field(allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _membership_and_lease_valid(self) -> "ClusterSnapshot":
+        if any(not member_id for member_id in self.member_ids):
+            raise ValueError("member_ids must not contain empty IDs")
+        if len(set(self.member_ids)) != len(self.member_ids):
+            raise ValueError("member_ids must be unique")
+        if self.leader_id not in self.member_ids:
+            raise ValueError("leader_id must be included in member_ids")
+        if any(not zone_id for zone_id in self.zone_ids):
+            raise ValueError("zone_ids must not contain empty IDs")
+        if len(set(self.zone_ids)) != len(self.zone_ids):
+            raise ValueError("zone_ids must be unique")
+        if self.lease_until <= self.updated_at:
+            raise ValueError("lease_until must be later than updated_at")
+        return self
 
 
 class Task(Contract):
@@ -112,6 +147,8 @@ class Task(Contract):
     created_at: float
     deadline: float | None = None
     epoch: int = Field(default=0, ge=0)  # leader epoch that issued/assigned it
+    cluster_id: ClusterId | None = None
+    cluster_epoch: int = Field(default=0, ge=0)
     # EXTINGUISH only: litres (of the loaded agent) to release on this hotspot. One sortie can serve several
     # hotspots because the tank is much bigger than a small spot fire needs. None = "all you have".
     volume_l: float | None = Field(default=None, gt=0)
