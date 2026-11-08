@@ -1,2 +1,20 @@
+<<<<<<< HEAD
 *.env
 backend/.venv/
+=======
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+
+# Local-only: datasets, Colab scratch, training runs and checkpoints (never commit data)
+exclude/
+
+# Claude local configuration
+.claude
+>>>>>>> 9a687b6c46c29b8199152cfc15b81d2943dd59f0
