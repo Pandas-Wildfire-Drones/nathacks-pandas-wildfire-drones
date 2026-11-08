@@ -138,20 +138,26 @@ class GazeboMissionRunner:
 
     async def takeoff(self):
         """Arms drone and takes off to cruise altitude"""
-        print("[*] Waiting for GPS lock in Gazebo...")
-        for _ in range(30):
-            try:
-                health_call = self.telemetry.health()
-                health = await health_call if asyncio.iscoroutine(health_call) else health_call
-                if getattr(health, 'is_global_position_ok', False) or getattr(health, 'is_home_position_ok', False):
-                    print("[+] GPS 3D fix locked in Gazebo world.")
-                    break
-            except Exception:
-                pass
-            await asyncio.sleep(0.5)
+        print("[*] Waiting for PX4 EKF2 estimator and GPS to converge in Gazebo...")
+        await asyncio.sleep(3)  # Give EKF2 3 seconds to boot
 
-        print("[*] Arming motors...")
-        await self.action.arm()
+        armed = False
+        print("[*] Arming motors (retrying until preflight checks pass)...")
+        for attempt in range(1, 26):
+            try:
+                await self.action.arm()
+                armed = True
+                print("[+] Motors armed successfully!")
+                break
+            except Exception:
+                print(f"[*] Pre-flight estimator settling... (Attempt {attempt}/25)")
+                await asyncio.sleep(1.5)
+
+        if not armed:
+            print("[!] Arming denied. In the PX4 terminal, type 'commander check' to see which check is failing.")
+            print("[!] Tip: You can bypass pre-flight checks in PX4 terminal with: commander arm -f")
+            return
+
         print(f"[*] Taking off to {CRUISE_ALTITUDE}m...")
         await self.action.set_takeoff_altitude(CRUISE_ALTITUDE)
         await self.action.takeoff()
