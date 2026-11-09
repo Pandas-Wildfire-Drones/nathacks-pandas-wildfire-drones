@@ -18,6 +18,7 @@ Drone-side perception. Imports only `contracts`, numpy and scipy (hard rule 1); 
 | `evaluate_confirm.py` | synthetic hover-sequence evaluation of the confirm stage |
 | `radiometry.py` | Planck temperature ↔ radiance (used whenever resolution changes) |
 | `patches.py` / `features.py` | preprocessing shared with training (versioned) |
+| `triage.py` | `TriageBands`: score → FIRE / REVIEW / NOT_FIRE, `triage_table`, `sweep_bands`, `suggest_bands` (comparison: `training/compare.py` + `training/compare_approaches.ipynb`) |
 | `evaluation.py` / `evaluate.py` | metrics (F1, recall-first threshold, object matching, CIs) and the test-split evaluator |
 | `synth.py` | synthetic radiometric night frames with exact masks (sub-pixel dilution, decoys) |
 | `RESULTS.md`, `results/*.json` | evaluated numbers (written by scripts) |

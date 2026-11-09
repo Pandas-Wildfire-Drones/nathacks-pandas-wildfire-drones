@@ -183,6 +183,12 @@ def main() -> None:
     ap.add_argument("--weak-labels", action="store_true", help="label proposals in mask-less fire frames positive")
     ap.add_argument("--no-scale-normalize", dest="scale_normalize", action="store_false",
                     help="plain pixel crops even if the manifest has gsd_m (A/B for decision 0004)")
+    ap.add_argument("--hard-neg-per-frame", type=int, default=0,
+                    help="extra negatives sampled from warm not-fire mask pixels away from fire (training/patch_data.py)")
+    ap.add_argument("--hard-pos-per-frame", type=int, default=0,
+                    help="extra positives sampled from the cooler half of the fire mask pixels")
+    ap.add_argument("--max-gt-per-frame", type=int, default=None,
+                    help="cap mask-centred positives to this many fire components per frame (real masks)")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
@@ -202,7 +208,9 @@ def main() -> None:
         recs = load_manifest(args.manifest, split="train")
         if not recs:
             raise SystemExit("no split == 'train' rows: run `python -m training.make_split` first")
-        ps = build_patch_set(recs, weak_labels=args.weak_labels, seed=args.seed, scale_normalize=args.scale_normalize)
+        ps = build_patch_set(recs, weak_labels=args.weak_labels, seed=args.seed, scale_normalize=args.scale_normalize,
+                             hard_neg_per_frame=args.hard_neg_per_frame, hard_pos_per_frame=args.hard_pos_per_frame,
+                             max_gt_objects_per_frame=args.max_gt_per_frame)
         stats = ps.stats
         ps.save(out / "patches.npz")
     print(f"[train_cnn] patches: {json.dumps(stats)}")

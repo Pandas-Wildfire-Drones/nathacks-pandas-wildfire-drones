@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .patches import PATCH_SPEC, PatchSpec, extract_patch_scaled
+from .patches import PATCH_SPEC, PatchSpec, extract_patch_scaled, per_centre_gsd
 
 __all__ = ["FEATURE_VERSION", "FEATURE_NAMES", "patch_features", "features_at"]
 
@@ -45,7 +45,10 @@ def patch_features(patches_c: np.ndarray, spec: PatchSpec = PATCH_SPEC) -> np.nd
 
 
 def features_at(temp_c: np.ndarray, centers_uv: list[tuple[float, float]], spec: PatchSpec = PATCH_SPEC,
-                gsd_m: float | None = None) -> np.ndarray:
+                gsd_m=None) -> np.ndarray:
+    """gsd_m: scalar, one value per centre, or None (see perception.patches.GsdArg)."""
     if not centers_uv:
         return np.zeros((0, len(FEATURE_NAMES)), dtype=np.float32)
-    return patch_features(np.stack([extract_patch_scaled(temp_c, u, v, gsd_m, spec) for u, v in centers_uv]), spec)
+    gs = per_centre_gsd(gsd_m, len(centers_uv))
+    return patch_features(np.stack([extract_patch_scaled(temp_c, u, v, g, spec)
+                                    for (u, v), g in zip(centers_uv, gs)]), spec)

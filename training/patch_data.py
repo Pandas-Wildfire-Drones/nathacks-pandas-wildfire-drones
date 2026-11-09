@@ -9,13 +9,17 @@ Labelling rules per frame:
                         + `gt_per_object` jittered patches centred on each mask component (extra positives);
                         + `random_neg_per_frame` random patches away from fire (easy negatives).
   no mask, label = 0    every proposal is negative (+ random negatives).
+  ignore pixels         (mask value perception.datasets.MASK_IGNORE) proposals touching them without touching fire
+                        are skipped, and random negatives avoid them.
   no mask, label = 1    ambiguous: a fire frame also contains warm non-fire blobs. Skipped unless
                         weak_labels=True, which labels all its proposals positive (noisy; prefer masks).
 
-Scale normalization: if EVERY frame has a gsd_m (manifest column), patches are fixed-ground-size windows
-(perception.patches.extract_patch_scaled) with a random +-20% GSD jitter per patch (altitude/AGL error), and the
-model is marked scale_normalized. If any frame lacks a GSD, all patches are plain pixel crops (mixing the two
-would teach the model two different scales).
+Scale normalization: if EVERY frame has a GSD (manifest gsd_m, or view geometry for oblique frames), patches are
+fixed-ground-size windows (perception.patches.extract_patch_scaled) with a random +-20% GSD jitter per patch
+(altitude/AGL error), and the model is marked scale_normalized. Oblique frames use the cross-track GSD of the
+patch centre's ROW (FrameRecord.gsd_rows): on FLAME 3 Sycan it changes ~3x between the bottom and the middle of a
+frame. The vertical foreshortening (sin of the depression) is NOT undone: the window is square in pixels-at-that-GSD.
+If any frame lacks a GSD, all patches are plain pixel crops (mixing the two would teach the model two scales).
 """
 from __future__ import annotations
 
@@ -24,12 +28,37 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import ndimage
 
-from perception.datasets import FrameRecord, frame_label, load_frame, load_mask
+from perception.datasets import FrameRecord, frame_label, load_frame, load_ignore, load_mask
 from perception.detectors import ThresholdDetector
-from perception.evaluation import blob_label, gt_objects_from_mask
+from perception.evaluation import BLOB_IGNORE, blob_label, gt_objects_from_mask
 from perception.patches import PATCH_SPEC, PatchSpec, extract_patch_scaled
 
-__all__ = ["PatchSet", "build_patch_set", "augment_batch"]
+__all__ = ["PatchSet", "build_patch_set", "augment_batch", "sample_hard_points"]
+
+
+def sample_hard_points(temp: np.ndarray, mask: np.ndarray, ignore: np.ndarray | None, rec: FrameRecord, n_neg: int,
+                       n_pos: int, rng: np.random.Generator, warm_dc: float = 8.0, clear_m: float = 1.2
+                       ) -> list[tuple[tuple[float, float], int]]:
+    """[((u, v), label)] drawn from the mask (see build_patch_set). Pixel centres; empty lists when nothing qualifies."""
+    out: list[tuple[tuple[float, float], int]] = []
+    gsd = rec.gsd_m if rec.gsd_m else (rec.gsd_at(temp.shape[0] / 2, temp.shape[0]) or 0.1)
+    if n_neg:
+        clear_px = max(int(np.ceil(clear_m / gsd)), 1)
+        # clear of fire AND of ignore: a patch centred on char next to a still-cooling (ignored) hot spot would show
+        # heat that the "not fire" label says isn't there
+        unsure = mask if ignore is None else (mask | ignore)
+        near = ndimage.binary_dilation(unsure, iterations=clear_px) if unsure.any() else np.zeros_like(mask)
+        cand = (~near) & (temp >= np.median(temp) + warm_dc)
+        vs, us = np.nonzero(cand)
+        for k in rng.choice(len(vs), min(n_neg, len(vs)), replace=False) if len(vs) else []:
+            out.append(((us[k] + 0.5, vs[k] + 0.5), 0))
+    if n_pos and mask.any():
+        vs, us = np.nonzero(mask)
+        cool = np.argsort(temp[vs, us], kind="stable")[:max(len(vs) // 2, 1)]   # by rank: ties at a clip value
+        vs, us = vs[cool], us[cool]
+        for k in rng.choice(len(vs), min(n_pos, len(vs)), replace=False) if len(vs) else []:
+            out.append(((us[k] + 0.5, vs[k] + 0.5), 1))
+    return out
 
 
 @dataclass
@@ -55,54 +84,82 @@ class PatchSet:
 def build_patch_set(records: list[FrameRecord], spec: PatchSpec = PATCH_SPEC, proposer: ThresholdDetector | None = None,
                     weak_labels: bool = False, gt_per_object: int = 2, gt_jitter_px: float = 2.0,
                     random_neg_per_frame: int = 1, seed: int = 0, gsd_jitter: float = 0.2,
-                    scale_normalize: bool = True) -> PatchSet:
-    """scale_normalize=False forces plain pixel crops even when GSDs are known (the A/B in decision 0004)."""
+                    scale_normalize: bool = True, hard_neg_per_frame: int = 0, hard_pos_per_frame: int = 0,
+                    warm_dc: float = 8.0, clear_m: float = 1.2, max_gt_objects_per_frame: int | None = None) -> PatchSet:
+    """scale_normalize=False forces plain pixel crops even when GSDs are known (the A/B in decision 0004).
+
+    hard_neg_per_frame / hard_pos_per_frame (masked frames only) sample patch centres straight from the mask, not
+    from proposals: the proposer keeps the 64 hottest blobs and one big blob touching any ember counts as fire, so
+    the most useful examples rarely appear as proposals:
+      hard negatives  not-fire pixels at least warm_dc above the frame median and >= clear_m from any fire or
+                      ignore pixel
+                      (NADIR: sun-warmed char at its plateau, warm unburned ground; Sycan: sun-warmed rocks/logs)
+      hard positives  the cooler half of the fire pixels (NADIR: residual embers 60-120 C, not the easy flames)
+    max_gt_objects_per_frame: mask-centred positives come from at most this many randomly chosen fire components per
+    frame. Needed for real masks: a burning NADIR frame or a weak-labelled Sycan frame has thousands of components,
+    which otherwise floods training with easy positives (92 % positive in the first mix run)."""
     rng = np.random.default_rng(seed)
     proposer = proposer or ThresholdDetector()
-    scale_normalized = scale_normalize and all(r.gsd_m is not None for r in records)
-    if scale_normalize and not scale_normalized and any(r.gsd_m is not None for r in records):
-        print("[patch_data] some frames lack gsd_m: using plain pixel crops for ALL frames")
+    scale_normalized = scale_normalize and all(r.has_gsd for r in records)
+    if scale_normalize and not scale_normalized and any(r.has_gsd for r in records):
+        print("[patch_data] some frames lack a GSD: using plain pixel crops for ALL frames")
 
-    def crop(temp, u, v, gsd):
+    def crop(temp, u, v, rec):
         if not scale_normalized:
             return extract_patch_scaled(temp, u, v, None, spec)
+        gsd = rec.gsd_at(v, temp.shape[0])
         return extract_patch_scaled(temp, u, v, gsd * float(rng.uniform(1 - gsd_jitter, 1 + gsd_jitter)), spec)
 
     P, y, g, o = [], [], [], []
-    skipped_ambiguous = 0
+    skipped_ambiguous = skipped_ignore = 0
     for rec in records:
         temp = load_frame(rec)
         mask = load_mask(rec)
+        ignore = load_ignore(rec)
         label = frame_label(rec, mask)
         blobs = proposer.blobs(temp)
         if mask is None and label == 1 and not weak_labels:
             skipped_ambiguous += 1
             continue
         for b in blobs:
-            lab = blob_label(b.bbox, mask) if mask is not None else label
-            P.append(crop(temp, b.u, b.v, rec.gsd_m)); y.append(lab); g.append(rec.group); o.append("proposal")
+            lab = blob_label(b.bbox, mask, ignore=ignore) if mask is not None else label
+            if lab == BLOB_IGNORE:
+                skipped_ignore += 1
+                continue
+            P.append(crop(temp, b.u, b.v, rec)); y.append(lab); g.append(rec.group); o.append("proposal")
         if mask is not None:
-            for gt in gt_objects_from_mask(mask):
+            gts = gt_objects_from_mask(mask)
+            if max_gt_objects_per_frame is not None and len(gts) > max_gt_objects_per_frame:
+                gts = [gts[i] for i in rng.choice(len(gts), max_gt_objects_per_frame, replace=False)]
+            for gt in gts:
                 for _ in range(gt_per_object):
                     du, dv = rng.normal(0, gt_jitter_px, 2)
-                    P.append(crop(temp, gt.u + du, gt.v + dv, rec.gsd_m))
+                    P.append(crop(temp, gt.u + du, gt.v + dv, rec))
                     y.append(1); g.append(rec.group); o.append("gt_center")
         h, w = temp.shape
+        if mask is not None and (hard_neg_per_frame or hard_pos_per_frame):
+            for (u, v), lab in sample_hard_points(temp, mask, ignore, rec, hard_neg_per_frame, hard_pos_per_frame,
+                                                  rng, warm_dc, clear_m):
+                P.append(crop(temp, u, v, rec)); y.append(lab); g.append(rec.group)
+                o.append("hard_pos" if lab else "hard_neg")
         avoid = ndimage.binary_dilation(mask, iterations=spec.size_px // 2) if mask is not None and label else None
+        if ignore is not None:
+            avoid = ignore if avoid is None else (avoid | ignore)
         for _ in range(random_neg_per_frame):
             for _try in range(20):
                 u, v = rng.uniform(0, w), rng.uniform(0, h)
                 if avoid is None or not avoid[int(v), int(u)]:
-                    P.append(crop(temp, u, v, rec.gsd_m)); y.append(0); g.append(rec.group); o.append("random_bg")
+                    P.append(crop(temp, u, v, rec)); y.append(0); g.append(rec.group); o.append("random_bg")
                     break
     if not P:
         raise ValueError("no patches built: check the manifest (labels/masks) and the threshold parameters")
     ps = PatchSet(np.stack(P).astype(np.float32), np.array(y, dtype=np.int8), np.array(g), np.array(o), {},
                   scale_normalized)
     ps.stats = {
-        "frames": len(records), "frames_skipped_ambiguous": skipped_ambiguous, "patches": int(len(ps.y)),
+        "frames": len(records), "frames_skipped_ambiguous": skipped_ambiguous,
+        "proposals_skipped_ignore": skipped_ignore, "patches": int(len(ps.y)),
         "positives": int(ps.y.sum()), "negatives": int((ps.y == 0).sum()), "groups": int(len(set(ps.groups))),
-        "by_origin": {k: int((ps.origin == k).sum()) for k in ("proposal", "gt_center", "random_bg")},
+        "by_origin": {k: int((ps.origin == k).sum()) for k in ("proposal", "gt_center", "random_bg", "hard_neg", "hard_pos")},
         "proposal_positives": int(ps.y[ps.origin == "proposal"].sum()),
         "proposal_negatives_hard": int((ps.y[ps.origin == "proposal"] == 0).sum()),
         "scale_normalized": scale_normalized,

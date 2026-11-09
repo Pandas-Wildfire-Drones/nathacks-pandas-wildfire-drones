@@ -1,0 +1,5670 @@
+{
+  "composite (shipped)": {
+    "nadir": {
+      "source": "nadir",
+      "n": 3407,
+      "n_fire": 1980,
+      "n_groups": 10,
+      "bypass_fired": 112,
+      "n_objects": 0,
+      "missed_objects": 0,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 1.0,
+          "roc_auc_ci95": [
+            1.0,
+            1.0
+          ],
+          "ap": 1.0,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 1980,
+            "fp": 20,
+            "fn": 0,
+            "precision": 0.99,
+            "recall": 1.0,
+            "f1": 0.9949748743718593,
+            "f2": 0.997983870967742,
+            "tn": 1407,
+            "accuracy": 0.9941297329028471,
+            "specificity": 0.9859845830413455
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 3407,
+            "n_fire": 1980,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 1401,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 579,
+                "not_fire": 20
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1407
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.17581449955972997,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        "model": {
+          "roc_auc": 0.9563819696615772,
+          "roc_auc_ci95": [
+            0.9397663891861063,
+            0.9732089951874696
+          ],
+          "ap": 0.9670928411060811,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 1438,
+            "fp": 47,
+            "fn": 542,
+            "precision": 0.9683501683501684,
+            "recall": 0.7262626262626263,
+            "f1": 0.8300144300144301,
+            "f2": 0.7644869750132908,
+            "tn": 1380,
+            "accuracy": 0.8271206339888465,
+            "specificity": 0.9670637701471618
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 3407,
+            "n_fire": 1980,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 1261,
+                "not_fire": 29
+              },
+              "REVIEW": {
+                "fire": 495,
+                "not_fire": 113
+              },
+              "NOT_FIRE": {
+                "fire": 224,
+                "not_fire": 1285
+              }
+            },
+            "missed_fire_rate": 0.11313131313131314,
+            "fire_or_review_recall": 0.8868686868686869,
+            "review_rate": 0.17845611975344877,
+            "fire_precision": 0.9775193798449613,
+            "false_alarm_rate": 0.020322354590049056,
+            "auto_accuracy": 0.9096105752054305
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9597623041911759,
+          "roc_auc_ci95": [
+            0.9441840856403076,
+            0.9771985756449801
+          ],
+          "ap": 0.9693964721918357,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 1495,
+            "fp": 47,
+            "fn": 485,
+            "precision": 0.9695201037613489,
+            "recall": 0.7550505050505051,
+            "f1": 0.8489494605337877,
+            "f2": 0.7900021137180301,
+            "tn": 1380,
+            "accuracy": 0.8438508952157323,
+            "specificity": 0.9670637701471618
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 3407,
+            "n_fire": 1980,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 1261,
+                "not_fire": 29
+              },
+              "REVIEW": {
+                "fire": 522,
+                "not_fire": 113
+              },
+              "NOT_FIRE": {
+                "fire": 197,
+                "not_fire": 1285
+              }
+            },
+            "missed_fire_rate": 0.0994949494949495,
+            "fire_or_review_recall": 0.9005050505050505,
+            "review_rate": 0.18638098033460523,
+            "fire_precision": 0.9775193798449613,
+            "false_alarm_rate": 0.020322354590049056,
+            "auto_accuracy": 0.9184704184704184
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1452,
+            "n_fire": 25,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 25,
+                "not_fire": 20
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1407
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.030991735537190084,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1452,
+            "n_fire": 25,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 2,
+                "not_fire": 29
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 113
+              },
+              "NOT_FIRE": {
+                "fire": 15,
+                "not_fire": 1285
+              }
+            },
+            "missed_fire_rate": 0.6,
+            "fire_or_review_recall": 0.4,
+            "review_rate": 0.08333333333333333,
+            "fire_precision": 0.06451612903225806,
+            "false_alarm_rate": 0.020322354590049056,
+            "auto_accuracy": 0.9669421487603306
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1452,
+            "n_fire": 25,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 2,
+                "not_fire": 29
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 113
+              },
+              "NOT_FIRE": {
+                "fire": 15,
+                "not_fire": 1285
+              }
+            },
+            "missed_fire_rate": 0.6,
+            "fire_or_review_recall": 0.4,
+            "review_rate": 0.08333333333333333,
+            "fire_precision": 0.06451612903225806,
+            "false_alarm_rate": 0.020322354590049056,
+            "auto_accuracy": 0.9669421487603306
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1226,
+            "n_fire": 1226,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 672,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 554,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.45187601957585644,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1226,
+            "n_fire": 1226,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 674,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 380,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 172,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.1402936378466558,
+            "fire_or_review_recall": 0.8597063621533442,
+            "review_rate": 0.3099510603588907,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.7966903073286052
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1226,
+            "n_fire": 1226,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 674,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 407,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 145,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.11827079934747145,
+            "fire_or_review_recall": 0.8817292006525286,
+            "review_rate": 0.33197389885807504,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.8229548229548229
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 729,
+            "n_fire": 729,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 729,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 729,
+            "n_fire": 729,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 585,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 107,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 37,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.05075445816186557,
+            "fire_or_review_recall": 0.9492455418381345,
+            "review_rate": 0.1467764060356653,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9405144694533762
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 729,
+            "n_fire": 729,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 585,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 107,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 37,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.05075445816186557,
+            "fire_or_review_recall": 0.9492455418381345,
+            "review_rate": 0.1467764060356653,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9405144694533762
+          }
+        }
+      }
+    },
+    "handlabels": {
+      "source": "handlabels:labels_DoqCA",
+      "n": 98,
+      "n_fire": 78,
+      "n_groups": 18,
+      "bypass_fired": 31,
+      "n_objects": 0,
+      "missed_objects": 0,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.5522435897435898,
+          "roc_auc_ci95": [
+            0.4129957386363637,
+            0.6651685393258426
+          ],
+          "ap": 0.8574616483515911,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 78,
+            "fp": 20,
+            "fn": 0,
+            "precision": 0.7959183673469388,
+            "recall": 1.0,
+            "f1": 0.8863636363636364,
+            "f2": 0.951219512195122,
+            "tn": 0,
+            "accuracy": 0.7959183673469388,
+            "specificity": 0.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 28,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 50,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.6428571428571429,
+            "fire_precision": 0.8,
+            "false_alarm_rate": 0.35,
+            "auto_accuracy": 0.8
+          }
+        },
+        "model": {
+          "roc_auc": 0.43653846153846154,
+          "roc_auc_ci95": [
+            0.33271803900325025,
+            0.5599880674880672
+          ],
+          "ap": 0.8013431516185082,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 66,
+            "fp": 18,
+            "fn": 12,
+            "precision": 0.7857142857142857,
+            "recall": 0.8461538461538461,
+            "f1": 0.8148148148148148,
+            "f2": 0.8333333333333333,
+            "tn": 2,
+            "accuracy": 0.6938775510204082,
+            "specificity": 0.1
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 59,
+                "not_fire": 18
+              },
+              "REVIEW": {
+                "fire": 14,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 5,
+                "not_fire": 1
+              }
+            },
+            "missed_fire_rate": 0.0641025641025641,
+            "fire_or_review_recall": 0.9358974358974359,
+            "review_rate": 0.15306122448979592,
+            "fire_precision": 0.7662337662337663,
+            "false_alarm_rate": 0.9,
+            "auto_accuracy": 0.7228915662650602
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.43974358974358974,
+          "roc_auc_ci95": [
+            0.33271803900325025,
+            0.5673241965191115
+          ],
+          "ap": 0.8019209484966989,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 71,
+            "fp": 18,
+            "fn": 7,
+            "precision": 0.797752808988764,
+            "recall": 0.9102564102564102,
+            "f1": 0.8502994011976048,
+            "f2": 0.8852867830423939,
+            "tn": 2,
+            "accuracy": 0.7448979591836735,
+            "specificity": 0.1
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 59,
+                "not_fire": 18
+              },
+              "REVIEW": {
+                "fire": 16,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 3,
+                "not_fire": 1
+              }
+            },
+            "missed_fire_rate": 0.038461538461538464,
+            "fire_or_review_recall": 0.9615384615384616,
+            "review_rate": 0.17346938775510204,
+            "fire_precision": 0.7662337662337663,
+            "false_alarm_rate": 0.9,
+            "auto_accuracy": 0.7407407407407407
+          }
+        }
+      },
+      "by_temp_band": {
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 28,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 50,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.6428571428571429,
+            "fire_precision": 0.8,
+            "false_alarm_rate": 0.35,
+            "auto_accuracy": 0.8
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 59,
+                "not_fire": 18
+              },
+              "REVIEW": {
+                "fire": 14,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 5,
+                "not_fire": 1
+              }
+            },
+            "missed_fire_rate": 0.0641025641025641,
+            "fire_or_review_recall": 0.9358974358974359,
+            "review_rate": 0.15306122448979592,
+            "fire_precision": 0.7662337662337663,
+            "false_alarm_rate": 0.9,
+            "auto_accuracy": 0.7228915662650602
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 59,
+                "not_fire": 18
+              },
+              "REVIEW": {
+                "fire": 16,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 3,
+                "not_fire": 1
+              }
+            },
+            "missed_fire_rate": 0.038461538461538464,
+            "fire_or_review_recall": 0.9615384615384616,
+            "review_rate": 0.17346938775510204,
+            "fire_precision": 0.7662337662337663,
+            "false_alarm_rate": 0.9,
+            "auto_accuracy": 0.7407407407407407
+          }
+        }
+      }
+    },
+    "composite": {
+      "source": "composite",
+      "n": 2893,
+      "n_fire": 162,
+      "n_groups": 4,
+      "bypass_fired": 31,
+      "n_objects": 168,
+      "missed_objects": 6,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.9845758122335688,
+          "roc_auc_ci95": [
+            0.9680516884414936,
+            0.9962472707423581
+          ],
+          "ap": 0.9295179033932616,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 133,
+            "fp": 16,
+            "fn": 29,
+            "precision": 0.8926174496644296,
+            "recall": 0.8209876543209876,
+            "f1": 0.8553054662379421,
+            "f2": 0.8343789209535758,
+            "tn": 2715,
+            "accuracy": 0.9844452125820947,
+            "specificity": 0.9941413401684365
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 2893,
+            "n_fire": 162,
+            "n_not_fire": 2731,
+            "counts": {
+              "FIRE": {
+                "fire": 91,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 42,
+                "not_fire": 16
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 2715
+              }
+            },
+            "missed_fire_rate": 0.17901234567901234,
+            "fire_or_review_recall": 0.8209876543209876,
+            "review_rate": 0.020048392671966817,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9897707231040564
+          }
+        },
+        "model": {
+          "roc_auc": 0.996609571856734,
+          "roc_auc_ci95": [
+            0.9928035982008996,
+            0.9995305990729332
+          ],
+          "ap": 0.985609737520317,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 158,
+            "fp": 10,
+            "fn": 4,
+            "precision": 0.9404761904761905,
+            "recall": 0.9753086419753086,
+            "f1": 0.9575757575757574,
+            "f2": 0.9681372549019608,
+            "tn": 2721,
+            "accuracy": 0.9951607328033184,
+            "specificity": 0.9963383376052728
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 2893,
+            "n_fire": 162,
+            "n_not_fire": 2731,
+            "counts": {
+              "FIRE": {
+                "fire": 156,
+                "not_fire": 6
+              },
+              "REVIEW": {
+                "fire": 5,
+                "not_fire": 15
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2710
+              }
+            },
+            "missed_fire_rate": 0.006172839506172839,
+            "fire_or_review_recall": 0.9938271604938271,
+            "review_rate": 0.0069132388524023505,
+            "fire_precision": 0.9629629629629629,
+            "false_alarm_rate": 0.0021969974368363236,
+            "auto_accuracy": 0.9975635224504003
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.996609571856734,
+          "roc_auc_ci95": [
+            0.9928035982008996,
+            0.9995305990729332
+          ],
+          "ap": 0.985609737520317,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 158,
+            "fp": 10,
+            "fn": 4,
+            "precision": 0.9404761904761905,
+            "recall": 0.9753086419753086,
+            "f1": 0.9575757575757574,
+            "f2": 0.9681372549019608,
+            "tn": 2721,
+            "accuracy": 0.9951607328033184,
+            "specificity": 0.9963383376052728
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 2893,
+            "n_fire": 162,
+            "n_not_fire": 2731,
+            "counts": {
+              "FIRE": {
+                "fire": 156,
+                "not_fire": 6
+              },
+              "REVIEW": {
+                "fire": 5,
+                "not_fire": 15
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2710
+              }
+            },
+            "missed_fire_rate": 0.006172839506172839,
+            "fire_or_review_recall": 0.9938271604938271,
+            "review_rate": 0.0069132388524023505,
+            "fire_precision": 0.9629629629629629,
+            "false_alarm_rate": 0.0021969974368363236,
+            "auto_accuracy": 0.9975635224504003
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 2765,
+            "n_fire": 37,
+            "n_not_fire": 2728,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 2715
+              }
+            },
+            "missed_fire_rate": 0.7837837837837838,
+            "fire_or_review_recall": 0.21621621621621623,
+            "review_rate": 0.007594936708860759,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9894314868804664
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 2765,
+            "n_fire": 37,
+            "n_not_fire": 2728,
+            "counts": {
+              "FIRE": {
+                "fire": 32,
+                "not_fire": 6
+              },
+              "REVIEW": {
+                "fire": 4,
+                "not_fire": 15
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2707
+              }
+            },
+            "missed_fire_rate": 0.02702702702702703,
+            "fire_or_review_recall": 0.972972972972973,
+            "review_rate": 0.006871609403254973,
+            "fire_precision": 0.8421052631578947,
+            "false_alarm_rate": 0.0021994134897360706,
+            "auto_accuracy": 0.9974508375819373
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 2765,
+            "n_fire": 37,
+            "n_not_fire": 2728,
+            "counts": {
+              "FIRE": {
+                "fire": 32,
+                "not_fire": 6
+              },
+              "REVIEW": {
+                "fire": 4,
+                "not_fire": 15
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2707
+              }
+            },
+            "missed_fire_rate": 0.02702702702702703,
+            "fire_or_review_recall": 0.972972972972973,
+            "review_rate": 0.006871609403254973,
+            "fire_precision": 0.8421052631578947,
+            "false_alarm_rate": 0.0021994134897360706,
+            "auto_accuracy": 0.9974508375819373
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 61,
+            "n_fire": 58,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 24,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 34,
+                "not_fire": 3
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.6065573770491803,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 61,
+            "n_fire": 58,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 57,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.01639344262295082,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 61,
+            "n_fire": 58,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 57,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.01639344262295082,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 67,
+            "n_fire": 67,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 67,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 67,
+            "n_fire": 67,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 67,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 67,
+            "n_fire": 67,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 67,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "cvsubset": {
+      "source": "cvsubset",
+      "n": 4670,
+      "n_fire": 3776,
+      "n_groups": 9,
+      "bypass_fired": 3710,
+      "n_objects": 15228,
+      "missed_objects": 0,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 1.0,
+          "roc_auc_ci95": [
+            1.0,
+            1.0
+          ],
+          "ap": 1.0,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 3776,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "tn": 894,
+            "accuracy": 1.0,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4670,
+            "n_fire": 3776,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 3767,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 9,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 894
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0019271948608137045,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        "model": {
+          "roc_auc": 0.9967559743866834,
+          "roc_auc_ci95": [
+            0.9952744602387258,
+            0.9987831003267934
+          ],
+          "ap": 0.9992747785155459,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 3294,
+            "fp": 0,
+            "fn": 482,
+            "precision": 1.0,
+            "recall": 0.8723516949152542,
+            "f1": 0.9318246110325318,
+            "f2": 0.8952060006522446,
+            "tn": 894,
+            "accuracy": 0.8967880085653105,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4670,
+            "n_fire": 3776,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 3060,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 524,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 192,
+                "not_fire": 892
+              }
+            },
+            "missed_fire_rate": 0.05084745762711865,
+            "fire_or_review_recall": 0.9491525423728814,
+            "review_rate": 0.1126338329764454,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9536679536679536
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.999732503412581,
+          "roc_auc_ci95": [
+            0.9996039543141096,
+            1.0
+          ],
+          "ap": 0.9999411601546485,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 3768,
+            "fp": 0,
+            "fn": 8,
+            "precision": 1.0,
+            "recall": 0.9978813559322034,
+            "f1": 0.9989395546129375,
+            "f2": 0.9983043662568886,
+            "tn": 894,
+            "accuracy": 0.9982869379014989,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4670,
+            "n_fire": 3776,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 3060,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 708,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 8,
+                "not_fire": 892
+              }
+            },
+            "missed_fire_rate": 0.00211864406779661,
+            "fire_or_review_recall": 0.9978813559322034,
+            "review_rate": 0.15203426124197003,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.997979797979798
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 896,
+            "n_fire": 2,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 2,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 894
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.002232142857142857,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 896,
+            "n_fire": 2,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 892
+              }
+            },
+            "missed_fire_rate": 1.0,
+            "fire_or_review_recall": 0.0,
+            "review_rate": 0.002232142857142857,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9977628635346756
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 896,
+            "n_fire": 2,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 892
+              }
+            },
+            "missed_fire_rate": 1.0,
+            "fire_or_review_recall": 0.0,
+            "review_rate": 0.002232142857142857,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9977628635346756
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 46,
+            "n_fire": 46,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 39,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 7,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.15217391304347827,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 46,
+            "n_fire": 46,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 16,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 14,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 16,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.34782608695652173,
+            "fire_or_review_recall": 0.6521739130434783,
+            "review_rate": 0.30434782608695654,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.5
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 46,
+            "n_fire": 46,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 16,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 24,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 6,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.13043478260869565,
+            "fire_or_review_recall": 0.8695652173913043,
+            "review_rate": 0.5217391304347826,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.7272727272727273
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 3728,
+            "n_fire": 3728,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3728,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 3728,
+            "n_fire": 3728,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3044,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 510,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 174,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.04667381974248927,
+            "fire_or_review_recall": 0.9533261802575107,
+            "review_rate": 0.13680257510729613,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9459291485394655
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 3728,
+            "n_fire": 3728,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3044,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 684,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.1834763948497854,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "all_with_hand": {
+      "source": "nadir+composite+cvsubset+handlabels",
+      "n": 10915,
+      "n_fire": 5984,
+      "n_groups": 41,
+      "bypass_fired": 3883,
+      "n_objects": 15396,
+      "missed_objects": 6,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.998413619310116,
+          "roc_auc_ci95": [
+            0.9950707950195644,
+            0.9995545172512483
+          ],
+          "ap": 0.9989126324098802,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 5955,
+            "fp": 55,
+            "fn": 29,
+            "precision": 0.9908485856905158,
+            "recall": 0.995153743315508,
+            "f1": 0.9929964982491246,
+            "f2": 0.9942897214986977,
+            "tn": 4876,
+            "accuracy": 0.992304168575355,
+            "specificity": 0.9888460758466843
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 10915,
+            "n_fire": 5984,
+            "n_not_fire": 4931,
+            "counts": {
+              "FIRE": {
+                "fire": 5278,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 677,
+                "not_fire": 48
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.004846256684491979,
+            "fire_or_review_recall": 0.995153743315508,
+            "review_rate": 0.06642235455794777,
+            "fire_precision": 0.9986754966887417,
+            "false_alarm_rate": 0.001419590346785642,
+            "auto_accuracy": 0.9964671246319922
+          }
+        },
+        "model": {
+          "roc_auc": 0.9863190572683785,
+          "roc_auc_ci95": [
+            0.9693203324571819,
+            0.9926445288159081
+          ],
+          "ap": 0.9880430425514581,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 4945,
+            "fp": 72,
+            "fn": 1039,
+            "precision": 0.9856487941000598,
+            "recall": 0.826370320855615,
+            "f1": 0.899009180983547,
+            "f2": 0.853970227610265,
+            "tn": 4859,
+            "accuracy": 0.8982134677049931,
+            "specificity": 0.9853984992902048
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 10915,
+            "n_fire": 5984,
+            "n_not_fire": 4931,
+            "counts": {
+              "FIRE": {
+                "fire": 4526,
+                "not_fire": 52
+              },
+              "REVIEW": {
+                "fire": 1036,
+                "not_fire": 101
+              },
+              "NOT_FIRE": {
+                "fire": 422,
+                "not_fire": 4778
+              }
+            },
+            "missed_fire_rate": 0.07052139037433156,
+            "fire_or_review_recall": 0.9294786096256684,
+            "review_rate": 0.10416857535501603,
+            "fire_precision": 0.9886413280908694,
+            "false_alarm_rate": 0.010545528290407625,
+            "auto_accuracy": 0.9515238290038863
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9904229164610665,
+          "roc_auc_ci95": [
+            0.9750566820862274,
+            0.9957321405747598
+          ],
+          "ap": 0.9910716938971067,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 5481,
+            "fp": 72,
+            "fn": 503,
+            "precision": 0.9870340356564019,
+            "recall": 0.9159425133689839,
+            "f1": 0.950160353644795,
+            "f2": 0.9293295805215506,
+            "tn": 4859,
+            "accuracy": 0.9473202015574896,
+            "specificity": 0.9853984992902048
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 10915,
+            "n_fire": 5984,
+            "n_not_fire": 4931,
+            "counts": {
+              "FIRE": {
+                "fire": 4526,
+                "not_fire": 52
+              },
+              "REVIEW": {
+                "fire": 1249,
+                "not_fire": 101
+              },
+              "NOT_FIRE": {
+                "fire": 209,
+                "not_fire": 4778
+              }
+            },
+            "missed_fire_rate": 0.034926470588235295,
+            "fire_or_review_recall": 0.9650735294117647,
+            "review_rate": 0.12368300503893724,
+            "fire_precision": 0.9886413280908694,
+            "false_alarm_rate": 0.010545528290407625,
+            "auto_accuracy": 0.9727130162049138
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 35,
+                "not_fire": 32
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.453125,
+            "fire_or_review_recall": 0.546875,
+            "review_rate": 0.013475462590506838,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9940876656472987
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 34,
+                "not_fire": 34
+              },
+              "REVIEW": {
+                "fire": 12,
+                "not_fire": 100
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 4774
+              }
+            },
+            "missed_fire_rate": 0.28125,
+            "fire_or_review_recall": 0.71875,
+            "review_rate": 0.02252614641995173,
+            "fire_precision": 0.5,
+            "false_alarm_rate": 0.0069274653626731865,
+            "auto_accuracy": 0.9893004115226337
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 34,
+                "not_fire": 34
+              },
+              "REVIEW": {
+                "fire": 12,
+                "not_fire": 100
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 4774
+              }
+            },
+            "missed_fire_rate": 0.28125,
+            "fire_or_review_recall": 0.71875,
+            "review_rate": 0.02252614641995173,
+            "fire_precision": 0.5,
+            "false_alarm_rate": 0.0069274653626731865,
+            "auto_accuracy": 0.9893004115226337
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1422,
+            "n_fire": 1399,
+            "n_not_fire": 23,
+            "counts": {
+              "FIRE": {
+                "fire": 757,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 642,
+                "not_fire": 16
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.46272855133614627,
+            "fire_precision": 0.9908376963350786,
+            "false_alarm_rate": 0.30434782608695654,
+            "auto_accuracy": 0.9908376963350786
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1422,
+            "n_fire": 1399,
+            "n_not_fire": 23,
+            "counts": {
+              "FIRE": {
+                "fire": 799,
+                "not_fire": 18
+              },
+              "REVIEW": {
+                "fire": 407,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 193,
+                "not_fire": 4
+              }
+            },
+            "missed_fire_rate": 0.13795568263045033,
+            "fire_or_review_recall": 0.8620443173695497,
+            "review_rate": 0.2869198312236287,
+            "fire_precision": 0.97796817625459,
+            "false_alarm_rate": 0.782608695652174,
+            "auto_accuracy": 0.7919132149901381
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1422,
+            "n_fire": 1399,
+            "n_not_fire": 23,
+            "counts": {
+              "FIRE": {
+                "fire": 799,
+                "not_fire": 18
+              },
+              "REVIEW": {
+                "fire": 446,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 154,
+                "not_fire": 4
+              }
+            },
+            "missed_fire_rate": 0.11007862759113653,
+            "fire_or_review_recall": 0.8899213724088635,
+            "review_rate": 0.3143459915611814,
+            "fire_precision": 0.97796817625459,
+            "false_alarm_rate": 0.782608695652174,
+            "auto_accuracy": 0.8235897435897436
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4521,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3693,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 617,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 211,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.046671090466710904,
+            "fire_or_review_recall": 0.9533289095332891,
+            "review_rate": 0.13647423136474232,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.945952868852459
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3693,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 791,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 37,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0081840300818403,
+            "fire_or_review_recall": 0.9918159699181597,
+            "review_rate": 0.17496129174961292,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9900804289544236
+          }
+        }
+      }
+    },
+    "all_no_hand": {
+      "source": "nadir+composite+cvsubset",
+      "n": 10817,
+      "n_fire": 5906,
+      "n_groups": 23,
+      "bypass_fired": 3852,
+      "n_objects": 15396,
+      "missed_objects": 6,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.9987206581243665,
+          "roc_auc_ci95": [
+            0.9958046893978151,
+            0.9999975104696828
+          ],
+          "ap": 0.9991769686247034,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 5877,
+            "fp": 35,
+            "fn": 29,
+            "precision": 0.9940798376184032,
+            "recall": 0.9950897392482222,
+            "f1": 0.9945845320697241,
+            "f2": 0.9948875947995667,
+            "tn": 4876,
+            "accuracy": 0.9940833872607931,
+            "specificity": 0.992873141926288
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 10817,
+            "n_fire": 5906,
+            "n_not_fire": 4911,
+            "counts": {
+              "FIRE": {
+                "fire": 5250,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 627,
+                "not_fire": 35
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.004910260751777853,
+            "fire_or_review_recall": 0.9950897392482222,
+            "review_rate": 0.06119996302117038,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9971442639094042
+          }
+        },
+        "model": {
+          "roc_auc": 0.9882325302335517,
+          "roc_auc_ci95": [
+            0.9739924156830174,
+            0.9931603240763776
+          ],
+          "ap": 0.9902532813977842,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 4879,
+            "fp": 54,
+            "fn": 1027,
+            "precision": 0.989053314413136,
+            "recall": 0.8261090416525567,
+            "f1": 0.9002675523572284,
+            "f2": 0.8542563994817384,
+            "tn": 4857,
+            "accuracy": 0.9000647129518351,
+            "specificity": 0.9890042761148442
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 10817,
+            "n_fire": 5906,
+            "n_not_fire": 4911,
+            "counts": {
+              "FIRE": {
+                "fire": 4467,
+                "not_fire": 34
+              },
+              "REVIEW": {
+                "fire": 1022,
+                "not_fire": 100
+              },
+              "NOT_FIRE": {
+                "fire": 417,
+                "not_fire": 4777
+              }
+            },
+            "missed_fire_rate": 0.07060616322384017,
+            "fire_or_review_recall": 0.9293938367761598,
+            "review_rate": 0.10372561708421929,
+            "fire_precision": 0.9924461230837591,
+            "false_alarm_rate": 0.006923233557320301,
+            "auto_accuracy": 0.9534811758638474
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9923698039115905,
+          "roc_auc_ci95": [
+            0.9791956782947555,
+            0.9965625603285816
+          ],
+          "ap": 0.9933429656395167,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 5410,
+            "fp": 54,
+            "fn": 496,
+            "precision": 0.9901171303074671,
+            "recall": 0.9160176092109719,
+            "f1": 0.951627088830255,
+            "f2": 0.9299367436743673,
+            "tn": 4857,
+            "accuracy": 0.9491541092724415,
+            "specificity": 0.9890042761148442
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 10817,
+            "n_fire": 5906,
+            "n_not_fire": 4911,
+            "counts": {
+              "FIRE": {
+                "fire": 4467,
+                "not_fire": 34
+              },
+              "REVIEW": {
+                "fire": 1233,
+                "not_fire": 100
+              },
+              "NOT_FIRE": {
+                "fire": 206,
+                "not_fire": 4777
+              }
+            },
+            "missed_fire_rate": 0.034879783271249576,
+            "fire_or_review_recall": 0.9651202167287504,
+            "review_rate": 0.12323194970879171,
+            "fire_precision": 0.9924461230837591,
+            "false_alarm_rate": 0.006923233557320301,
+            "auto_accuracy": 0.9746942218473218
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 35,
+                "not_fire": 32
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.453125,
+            "fire_or_review_recall": 0.546875,
+            "review_rate": 0.013475462590506838,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9940876656472987
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 34,
+                "not_fire": 34
+              },
+              "REVIEW": {
+                "fire": 12,
+                "not_fire": 100
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 4774
+              }
+            },
+            "missed_fire_rate": 0.28125,
+            "fire_or_review_recall": 0.71875,
+            "review_rate": 0.02252614641995173,
+            "fire_precision": 0.5,
+            "false_alarm_rate": 0.0069274653626731865,
+            "auto_accuracy": 0.9893004115226337
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 34,
+                "not_fire": 34
+              },
+              "REVIEW": {
+                "fire": 12,
+                "not_fire": 100
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 4774
+              }
+            },
+            "missed_fire_rate": 0.28125,
+            "fire_or_review_recall": 0.71875,
+            "review_rate": 0.02252614641995173,
+            "fire_precision": 0.5,
+            "false_alarm_rate": 0.0069274653626731865,
+            "auto_accuracy": 0.9893004115226337
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1324,
+            "n_fire": 1321,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 729,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 592,
+                "not_fire": 3
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.44939577039274925,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1324,
+            "n_fire": 1321,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 740,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 393,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 188,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.14231642694928084,
+            "fire_or_review_recall": 0.8576835730507192,
+            "review_rate": 0.29682779456193353,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.7980665950590763
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1324,
+            "n_fire": 1321,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 740,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 430,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 151,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.11430734292202877,
+            "fire_or_review_recall": 0.8856926570779712,
+            "review_rate": 0.324773413897281,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.831096196868009
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4521,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3693,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 617,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 211,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.046671090466710904,
+            "fire_or_review_recall": 0.9533289095332891,
+            "review_rate": 0.13647423136474232,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.945952868852459
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3693,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 791,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 37,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0081840300818403,
+            "fire_or_review_recall": 0.9918159699181597,
+            "review_rate": 0.17496129174961292,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9900804289544236
+          }
+        }
+      }
+    },
+    "nadir_proposals": {
+      "source": "nadir_proposals",
+      "n": 2570,
+      "n_fire": 2544,
+      "n_groups": 10,
+      "bypass_fired": 1034,
+      "n_objects": 15642,
+      "missed_objects": 289,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 1.0,
+          "roc_auc_ci95": [
+            1.0,
+            1.0
+          ],
+          "ap": 1.0,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 2544,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "tn": 26,
+            "accuracy": 1.0,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 2570,
+            "n_fire": 2544,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 1073,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1471,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 26
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.5723735408560311,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        "model": {
+          "roc_auc": 0.8338322447992259,
+          "roc_auc_ci95": [
+            0.752334128673793,
+            0.9106869464351682
+          ],
+          "ap": 0.9980580342187013,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 1585,
+            "fp": 1,
+            "fn": 959,
+            "precision": 0.9993694829760403,
+            "recall": 0.6230345911949685,
+            "f1": 0.7675544794188861,
+            "f2": 0.6737799693929604,
+            "tn": 25,
+            "accuracy": 0.6264591439688716,
+            "specificity": 0.9615384615384616
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 2570,
+            "n_fire": 2544,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 1396,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 618,
+                "not_fire": 8
+              },
+              "NOT_FIRE": {
+                "fire": 530,
+                "not_fire": 17
+              }
+            },
+            "missed_fire_rate": 0.20833333333333334,
+            "fire_or_review_recall": 0.7916666666666666,
+            "review_rate": 0.24357976653696498,
+            "fire_precision": 0.9992841803865425,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.7268518518518519
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.8618922351233672,
+          "roc_auc_ci95": [
+            0.7800664650428745,
+            0.932161112623426
+          ],
+          "ap": 0.998415865273305,
+          "search_threshold": 0.7469055652618408,
+          "search": {
+            "tp": 1824,
+            "fp": 1,
+            "fn": 720,
+            "precision": 0.9994520547945206,
+            "recall": 0.7169811320754716,
+            "f1": 0.8349736781872282,
+            "f2": 0.7599366719440046,
+            "tn": 25,
+            "accuracy": 0.7194552529182879,
+            "specificity": 0.9615384615384616
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 2570,
+            "n_fire": 2544,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 1396,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 720,
+                "not_fire": 8
+              },
+              "NOT_FIRE": {
+                "fire": 428,
+                "not_fire": 17
+              }
+            },
+            "missed_fire_rate": 0.16823899371069181,
+            "fire_or_review_recall": 0.8317610062893082,
+            "review_rate": 0.28326848249027237,
+            "fire_precision": 0.9992841803865425,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.7671009771986971
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 175,
+            "n_fire": 149,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 149,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 26
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.8514285714285714,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 175,
+            "n_fire": 149,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 6,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 29,
+                "not_fire": 8
+              },
+              "NOT_FIRE": {
+                "fire": 114,
+                "not_fire": 17
+              }
+            },
+            "missed_fire_rate": 0.7651006711409396,
+            "fire_or_review_recall": 0.2348993288590604,
+            "review_rate": 0.21142857142857144,
+            "fire_precision": 0.8571428571428571,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.16666666666666666
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 175,
+            "n_fire": 149,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 6,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 29,
+                "not_fire": 8
+              },
+              "NOT_FIRE": {
+                "fire": 114,
+                "not_fire": 17
+              }
+            },
+            "missed_fire_rate": 0.7651006711409396,
+            "fire_or_review_recall": 0.2348993288590604,
+            "review_rate": 0.21142857142857144,
+            "fire_precision": 0.8571428571428571,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.16666666666666666
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1862,
+            "n_fire": 1862,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 540,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1322,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.7099892588614393,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1862,
+            "n_fire": 1862,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 1015,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 472,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 375,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.20139634801288936,
+            "fire_or_review_recall": 0.7986036519871106,
+            "review_rate": 0.2534908700322234,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.7302158273381295
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 1862,
+            "n_fire": 1862,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 1015,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 533,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 314,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.1686358754027927,
+            "fire_or_review_recall": 0.8313641245972073,
+            "review_rate": 0.2862513426423201,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.763732129420617
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 533,
+            "n_fire": 533,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 533,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 533,
+            "n_fire": 533,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 375,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 117,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 41,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.07692307692307693,
+            "fire_or_review_recall": 0.9230769230769231,
+            "review_rate": 0.21951219512195122,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9014423076923077
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.21462605893611908,
+              "fire_at_or_above": 0.903910219669342
+            },
+            "n": 533,
+            "n_fire": 533,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 375,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 158,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.2964352720450281,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    }
+  },
+  "mix_v2": {
+    "nadir": {
+      "source": "nadir",
+      "n": 3407,
+      "n_fire": 1980,
+      "n_groups": 10,
+      "bypass_fired": 112,
+      "n_objects": 0,
+      "missed_objects": 0,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 1.0,
+          "roc_auc_ci95": [
+            1.0,
+            1.0
+          ],
+          "ap": 1.0,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 1980,
+            "fp": 20,
+            "fn": 0,
+            "precision": 0.99,
+            "recall": 1.0,
+            "f1": 0.9949748743718593,
+            "f2": 0.997983870967742,
+            "tn": 1407,
+            "accuracy": 0.9941297329028471,
+            "specificity": 0.9859845830413455
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 3407,
+            "n_fire": 1980,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 1401,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 579,
+                "not_fire": 20
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1407
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.17581449955972997,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        "model": {
+          "roc_auc": 0.9999943372052692,
+          "roc_auc_ci95": [
+            0.9999848737551073,
+            1.0
+          ],
+          "ap": 0.9999959170908698,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 1975,
+            "fp": 1,
+            "fn": 5,
+            "precision": 0.9994939271255061,
+            "recall": 0.9974747474747475,
+            "f1": 0.9984833164812942,
+            "f2": 0.9978779304769606,
+            "tn": 1426,
+            "accuracy": 0.9982389198708541,
+            "specificity": 0.9992992291520673
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 3407,
+            "n_fire": 1980,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 1975,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 5,
+                "not_fire": 82
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1344
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.025535661872615203,
+            "fire_precision": 0.9994939271255061,
+            "false_alarm_rate": 0.000700770847932726,
+            "auto_accuracy": 0.9996987951807229
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9999943372052692,
+          "roc_auc_ci95": [
+            0.9999848737551073,
+            1.0
+          ],
+          "ap": 0.9999959170908698,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 1975,
+            "fp": 1,
+            "fn": 5,
+            "precision": 0.9994939271255061,
+            "recall": 0.9974747474747475,
+            "f1": 0.9984833164812942,
+            "f2": 0.9978779304769606,
+            "tn": 1426,
+            "accuracy": 0.9982389198708541,
+            "specificity": 0.9992992291520673
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 3407,
+            "n_fire": 1980,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 1975,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 5,
+                "not_fire": 82
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1344
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.025535661872615203,
+            "fire_precision": 0.9994939271255061,
+            "false_alarm_rate": 0.000700770847932726,
+            "auto_accuracy": 0.9996987951807229
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1452,
+            "n_fire": 25,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 25,
+                "not_fire": 20
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1407
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.030991735537190084,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1452,
+            "n_fire": 25,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 21,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 4,
+                "not_fire": 82
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1344
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.05922865013774105,
+            "fire_precision": 0.9545454545454546,
+            "false_alarm_rate": 0.000700770847932726,
+            "auto_accuracy": 0.9992679355783309
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1452,
+            "n_fire": 25,
+            "n_not_fire": 1427,
+            "counts": {
+              "FIRE": {
+                "fire": 21,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 4,
+                "not_fire": 82
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 1344
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.05922865013774105,
+            "fire_precision": 0.9545454545454546,
+            "false_alarm_rate": 0.000700770847932726,
+            "auto_accuracy": 0.9992679355783309
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1226,
+            "n_fire": 1226,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 672,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 554,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.45187601957585644,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1226,
+            "n_fire": 1226,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 1225,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0008156606851549756,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1226,
+            "n_fire": 1226,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 1225,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0008156606851549756,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 729,
+            "n_fire": 729,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 729,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 729,
+            "n_fire": 729,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 729,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 729,
+            "n_fire": 729,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 729,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "handlabels": {
+      "source": "handlabels:labels_DoqCA",
+      "n": 98,
+      "n_fire": 78,
+      "n_groups": 18,
+      "bypass_fired": 31,
+      "n_objects": 0,
+      "missed_objects": 0,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.5522435897435898,
+          "roc_auc_ci95": [
+            0.4129957386363637,
+            0.6651685393258426
+          ],
+          "ap": 0.8574616483515911,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 78,
+            "fp": 20,
+            "fn": 0,
+            "precision": 0.7959183673469388,
+            "recall": 1.0,
+            "f1": 0.8863636363636364,
+            "f2": 0.951219512195122,
+            "tn": 0,
+            "accuracy": 0.7959183673469388,
+            "specificity": 0.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 28,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 50,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.6428571428571429,
+            "fire_precision": 0.8,
+            "false_alarm_rate": 0.35,
+            "auto_accuracy": 0.8
+          }
+        },
+        "model": {
+          "roc_auc": 0.42435897435897435,
+          "roc_auc_ci95": [
+            0.31533712728169155,
+            0.5538641913641913
+          ],
+          "ap": 0.8046962735650396,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 71,
+            "fp": 19,
+            "fn": 7,
+            "precision": 0.7888888888888889,
+            "recall": 0.9102564102564102,
+            "f1": 0.8452380952380951,
+            "f2": 0.8830845771144278,
+            "tn": 1,
+            "accuracy": 0.7346938775510204,
+            "specificity": 0.05
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 71,
+                "not_fire": 19
+              },
+              "REVIEW": {
+                "fire": 7,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.08163265306122448,
+            "fire_precision": 0.7888888888888889,
+            "false_alarm_rate": 0.95,
+            "auto_accuracy": 0.7888888888888889
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.42435897435897435,
+          "roc_auc_ci95": [
+            0.31533712728169155,
+            0.5538641913641913
+          ],
+          "ap": 0.8046962735650396,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 73,
+            "fp": 19,
+            "fn": 5,
+            "precision": 0.7934782608695652,
+            "recall": 0.9358974358974359,
+            "f1": 0.8588235294117647,
+            "f2": 0.9034653465346535,
+            "tn": 1,
+            "accuracy": 0.7551020408163265,
+            "specificity": 0.05
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 71,
+                "not_fire": 19
+              },
+              "REVIEW": {
+                "fire": 7,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.08163265306122448,
+            "fire_precision": 0.7888888888888889,
+            "false_alarm_rate": 0.95,
+            "auto_accuracy": 0.7888888888888889
+          }
+        }
+      },
+      "by_temp_band": {
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 28,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 50,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.6428571428571429,
+            "fire_precision": 0.8,
+            "false_alarm_rate": 0.35,
+            "auto_accuracy": 0.8
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 71,
+                "not_fire": 19
+              },
+              "REVIEW": {
+                "fire": 7,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.08163265306122448,
+            "fire_precision": 0.7888888888888889,
+            "false_alarm_rate": 0.95,
+            "auto_accuracy": 0.7888888888888889
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 98,
+            "n_fire": 78,
+            "n_not_fire": 20,
+            "counts": {
+              "FIRE": {
+                "fire": 71,
+                "not_fire": 19
+              },
+              "REVIEW": {
+                "fire": 7,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.08163265306122448,
+            "fire_precision": 0.7888888888888889,
+            "false_alarm_rate": 0.95,
+            "auto_accuracy": 0.7888888888888889
+          }
+        }
+      }
+    },
+    "composite": {
+      "source": "composite",
+      "n": 2893,
+      "n_fire": 162,
+      "n_groups": 4,
+      "bypass_fired": 31,
+      "n_objects": 168,
+      "missed_objects": 6,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.9845758122335688,
+          "roc_auc_ci95": [
+            0.9680516884414936,
+            0.9962472707423581
+          ],
+          "ap": 0.9295179033932616,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 133,
+            "fp": 16,
+            "fn": 29,
+            "precision": 0.8926174496644296,
+            "recall": 0.8209876543209876,
+            "f1": 0.8553054662379421,
+            "f2": 0.8343789209535758,
+            "tn": 2715,
+            "accuracy": 0.9844452125820947,
+            "specificity": 0.9941413401684365
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 2893,
+            "n_fire": 162,
+            "n_not_fire": 2731,
+            "counts": {
+              "FIRE": {
+                "fire": 91,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 42,
+                "not_fire": 16
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 2715
+              }
+            },
+            "missed_fire_rate": 0.17901234567901234,
+            "fire_or_review_recall": 0.8209876543209876,
+            "review_rate": 0.020048392671966817,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9897707231040564
+          }
+        },
+        "model": {
+          "roc_auc": 0.9951494274697009,
+          "roc_auc_ci95": [
+            0.988584279288927,
+            1.0
+          ],
+          "ap": 0.9920893342075227,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 151,
+            "fp": 2,
+            "fn": 11,
+            "precision": 0.9869281045751634,
+            "recall": 0.9320987654320988,
+            "f1": 0.9587301587301588,
+            "f2": 0.9425717852684146,
+            "tn": 2729,
+            "accuracy": 0.9955063947459385,
+            "specificity": 0.9992676675210546
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 2893,
+            "n_fire": 162,
+            "n_not_fire": 2731,
+            "counts": {
+              "FIRE": {
+                "fire": 151,
+                "not_fire": 2
+              },
+              "REVIEW": {
+                "fire": 10,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2716
+              }
+            },
+            "missed_fire_rate": 0.006172839506172839,
+            "fire_or_review_recall": 0.9938271604938271,
+            "review_rate": 0.007950224680262703,
+            "fire_precision": 0.9869281045751634,
+            "false_alarm_rate": 0.0007323324789454412,
+            "auto_accuracy": 0.9989547038327526
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9951494274697009,
+          "roc_auc_ci95": [
+            0.988584279288927,
+            1.0
+          ],
+          "ap": 0.9920893342075227,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 151,
+            "fp": 2,
+            "fn": 11,
+            "precision": 0.9869281045751634,
+            "recall": 0.9320987654320988,
+            "f1": 0.9587301587301588,
+            "f2": 0.9425717852684146,
+            "tn": 2729,
+            "accuracy": 0.9955063947459385,
+            "specificity": 0.9992676675210546
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 2893,
+            "n_fire": 162,
+            "n_not_fire": 2731,
+            "counts": {
+              "FIRE": {
+                "fire": 151,
+                "not_fire": 2
+              },
+              "REVIEW": {
+                "fire": 10,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2716
+              }
+            },
+            "missed_fire_rate": 0.006172839506172839,
+            "fire_or_review_recall": 0.9938271604938271,
+            "review_rate": 0.007950224680262703,
+            "fire_precision": 0.9869281045751634,
+            "false_alarm_rate": 0.0007323324789454412,
+            "auto_accuracy": 0.9989547038327526
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 2765,
+            "n_fire": 37,
+            "n_not_fire": 2728,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 2715
+              }
+            },
+            "missed_fire_rate": 0.7837837837837838,
+            "fire_or_review_recall": 0.21621621621621623,
+            "review_rate": 0.007594936708860759,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9894314868804664
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 2765,
+            "n_fire": 37,
+            "n_not_fire": 2728,
+            "counts": {
+              "FIRE": {
+                "fire": 28,
+                "not_fire": 2
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2713
+              }
+            },
+            "missed_fire_rate": 0.02702702702702703,
+            "fire_or_review_recall": 0.972972972972973,
+            "review_rate": 0.007594936708860759,
+            "fire_precision": 0.9333333333333333,
+            "false_alarm_rate": 0.0007331378299120235,
+            "auto_accuracy": 0.9989067055393586
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 2765,
+            "n_fire": 37,
+            "n_not_fire": 2728,
+            "counts": {
+              "FIRE": {
+                "fire": 28,
+                "not_fire": 2
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 13
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 2713
+              }
+            },
+            "missed_fire_rate": 0.02702702702702703,
+            "fire_or_review_recall": 0.972972972972973,
+            "review_rate": 0.007594936708860759,
+            "fire_precision": 0.9333333333333333,
+            "false_alarm_rate": 0.0007331378299120235,
+            "auto_accuracy": 0.9989067055393586
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 61,
+            "n_fire": 58,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 24,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 34,
+                "not_fire": 3
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.6065573770491803,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 61,
+            "n_fire": 58,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 56,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 2,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.03278688524590164,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 61,
+            "n_fire": 58,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 56,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 2,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.03278688524590164,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 67,
+            "n_fire": 67,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 67,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 67,
+            "n_fire": 67,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 67,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 67,
+            "n_fire": 67,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 67,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "cvsubset": {
+      "source": "cvsubset",
+      "n": 4670,
+      "n_fire": 3776,
+      "n_groups": 9,
+      "bypass_fired": 3710,
+      "n_objects": 15228,
+      "missed_objects": 0,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 1.0,
+          "roc_auc_ci95": [
+            1.0,
+            1.0
+          ],
+          "ap": 1.0,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 3776,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "tn": 894,
+            "accuracy": 1.0,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4670,
+            "n_fire": 3776,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 3767,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 9,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 894
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0019271948608137045,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        "model": {
+          "roc_auc": 0.9998166330148258,
+          "roc_auc_ci95": [
+            0.9997818035266471,
+            1.0
+          ],
+          "ap": 0.999958381910591,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 3678,
+            "fp": 0,
+            "fn": 98,
+            "precision": 1.0,
+            "recall": 0.9740466101694916,
+            "f1": 0.9868526965387712,
+            "f2": 0.9791289532531147,
+            "tn": 894,
+            "accuracy": 0.9790149892933618,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4670,
+            "n_fire": 3776,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 3678,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 79,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 19,
+                "not_fire": 893
+              }
+            },
+            "missed_fire_rate": 0.005031779661016949,
+            "fire_or_review_recall": 0.994968220338983,
+            "review_rate": 0.017130620985010708,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9958605664488017
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9999620824327912,
+          "roc_auc_ci95": [
+            0.9999149988481087,
+            1.0
+          ],
+          "ap": 0.999991317032509,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 3770,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.9984110169491526,
+            "f1": 0.9992048767558971,
+            "f2": 0.9987284094521566,
+            "tn": 894,
+            "accuracy": 0.9987152034261242,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4670,
+            "n_fire": 3776,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 3678,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 97,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 893
+              }
+            },
+            "missed_fire_rate": 0.00026483050847457627,
+            "fire_or_review_recall": 0.9997351694915254,
+            "review_rate": 0.020985010706638114,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9997812773403325
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 896,
+            "n_fire": 2,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 2,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 894
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.002232142857142857,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 896,
+            "n_fire": 2,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 893
+              }
+            },
+            "missed_fire_rate": 0.5,
+            "fire_or_review_recall": 0.5,
+            "review_rate": 0.002232142857142857,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9988814317673378
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 896,
+            "n_fire": 2,
+            "n_not_fire": 894,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 1,
+                "not_fire": 893
+              }
+            },
+            "missed_fire_rate": 0.5,
+            "fire_or_review_recall": 0.5,
+            "review_rate": 0.002232142857142857,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9988814317673378
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 46,
+            "n_fire": 46,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 39,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 7,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.15217391304347827,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 46,
+            "n_fire": 46,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 38,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.17391304347826086,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 46,
+            "n_fire": 46,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 38,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 8,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.17391304347826086,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 3728,
+            "n_fire": 3728,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3728,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 3728,
+            "n_fire": 3728,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3640,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 70,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.004828326180257511,
+            "fire_or_review_recall": 0.9951716738197425,
+            "review_rate": 0.018776824034334765,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9950792782941498
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 3728,
+            "n_fire": 3728,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 3640,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 88,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.023605150214592276,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "all_with_hand": {
+      "source": "nadir+composite+cvsubset+handlabels",
+      "n": 10915,
+      "n_fire": 5984,
+      "n_groups": 41,
+      "bypass_fired": 3883,
+      "n_objects": 15396,
+      "missed_objects": 6,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.998413619310116,
+          "roc_auc_ci95": [
+            0.9950707950195644,
+            0.9995545172512483
+          ],
+          "ap": 0.9989126324098802,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 5955,
+            "fp": 55,
+            "fn": 29,
+            "precision": 0.9908485856905158,
+            "recall": 0.995153743315508,
+            "f1": 0.9929964982491246,
+            "f2": 0.9942897214986977,
+            "tn": 4876,
+            "accuracy": 0.992304168575355,
+            "specificity": 0.9888460758466843
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 10915,
+            "n_fire": 5984,
+            "n_not_fire": 4931,
+            "counts": {
+              "FIRE": {
+                "fire": 5278,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 677,
+                "not_fire": 48
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.004846256684491979,
+            "fire_or_review_recall": 0.995153743315508,
+            "review_rate": 0.06642235455794777,
+            "fire_precision": 0.9986754966887417,
+            "false_alarm_rate": 0.001419590346785642,
+            "auto_accuracy": 0.9964671246319922
+          }
+        },
+        "model": {
+          "roc_auc": 0.9982276132554384,
+          "roc_auc_ci95": [
+            0.9947156190895765,
+            0.9991971012802219
+          ],
+          "ap": 0.9982558100878242,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 5863,
+            "fp": 22,
+            "fn": 121,
+            "precision": 0.9962616822429906,
+            "recall": 0.9797794117647058,
+            "f1": 0.9879518072289156,
+            "f2": 0.983032091479159,
+            "tn": 4909,
+            "accuracy": 0.9868987631699496,
+            "specificity": 0.9955384303386737
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 10915,
+            "n_fire": 5984,
+            "n_not_fire": 4931,
+            "counts": {
+              "FIRE": {
+                "fire": 5863,
+                "not_fire": 22
+              },
+              "REVIEW": {
+                "fire": 101,
+                "not_fire": 91
+              },
+              "NOT_FIRE": {
+                "fire": 20,
+                "not_fire": 4818
+              }
+            },
+            "missed_fire_rate": 0.0033422459893048127,
+            "fire_or_review_recall": 0.9966577540106952,
+            "review_rate": 0.017590471827759965,
+            "fire_precision": 0.9962616822429906,
+            "false_alarm_rate": 0.004461569661326303,
+            "auto_accuracy": 0.9960831856756505
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9984601674227331,
+          "roc_auc_ci95": [
+            0.9948488207233018,
+            0.9994115294999089
+          ],
+          "ap": 0.9984251827422673,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 5957,
+            "fp": 22,
+            "fn": 27,
+            "precision": 0.9963204549255729,
+            "recall": 0.9954879679144385,
+            "f1": 0.9959040374488005,
+            "f2": 0.9956543540030085,
+            "tn": 4909,
+            "accuracy": 0.9955107650022904,
+            "specificity": 0.9955384303386737
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 10915,
+            "n_fire": 5984,
+            "n_not_fire": 4931,
+            "counts": {
+              "FIRE": {
+                "fire": 5863,
+                "not_fire": 22
+              },
+              "REVIEW": {
+                "fire": 119,
+                "not_fire": 91
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 4818
+              }
+            },
+            "missed_fire_rate": 0.00033422459893048126,
+            "fire_or_review_recall": 0.9996657754010695,
+            "review_rate": 0.01923957856161246,
+            "fire_precision": 0.9962616822429906,
+            "false_alarm_rate": 0.004461569661326303,
+            "auto_accuracy": 0.9977580569827184
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 35,
+                "not_fire": 32
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.453125,
+            "fire_or_review_recall": 0.546875,
+            "review_rate": 0.013475462590506838,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9940876656472987
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 49,
+                "not_fire": 3
+              },
+              "REVIEW": {
+                "fire": 13,
+                "not_fire": 90
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 4815
+              }
+            },
+            "missed_fire_rate": 0.03125,
+            "fire_or_review_recall": 0.96875,
+            "review_rate": 0.020716009654062752,
+            "fire_precision": 0.9423076923076923,
+            "false_alarm_rate": 0.0006112469437652812,
+            "auto_accuracy": 0.9989730950913945
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 49,
+                "not_fire": 3
+              },
+              "REVIEW": {
+                "fire": 13,
+                "not_fire": 90
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 4815
+              }
+            },
+            "missed_fire_rate": 0.03125,
+            "fire_or_review_recall": 0.96875,
+            "review_rate": 0.020716009654062752,
+            "fire_precision": 0.9423076923076923,
+            "false_alarm_rate": 0.0006112469437652812,
+            "auto_accuracy": 0.9989730950913945
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1422,
+            "n_fire": 1399,
+            "n_not_fire": 23,
+            "counts": {
+              "FIRE": {
+                "fire": 757,
+                "not_fire": 7
+              },
+              "REVIEW": {
+                "fire": 642,
+                "not_fire": 16
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.46272855133614627,
+            "fire_precision": 0.9908376963350786,
+            "false_alarm_rate": 0.30434782608695654,
+            "auto_accuracy": 0.9908376963350786
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1422,
+            "n_fire": 1399,
+            "n_not_fire": 23,
+            "counts": {
+              "FIRE": {
+                "fire": 1381,
+                "not_fire": 19
+              },
+              "REVIEW": {
+                "fire": 18,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.013361462728551337,
+            "fire_precision": 0.9864285714285714,
+            "false_alarm_rate": 0.8260869565217391,
+            "auto_accuracy": 0.9864575908766928
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1422,
+            "n_fire": 1399,
+            "n_not_fire": 23,
+            "counts": {
+              "FIRE": {
+                "fire": 1381,
+                "not_fire": 19
+              },
+              "REVIEW": {
+                "fire": 18,
+                "not_fire": 1
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.013361462728551337,
+            "fire_precision": 0.9864285714285714,
+            "false_alarm_rate": 0.8260869565217391,
+            "auto_accuracy": 0.9864575908766928
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4521,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4433,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 70,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.003981420039814201,
+            "fire_or_review_recall": 0.9960185799601858,
+            "review_rate": 0.015483300154833,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9959559649516962
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4433,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 88,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.019464720194647202,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "all_no_hand": {
+      "source": "nadir+composite+cvsubset",
+      "n": 10817,
+      "n_fire": 5906,
+      "n_groups": 23,
+      "bypass_fired": 3852,
+      "n_objects": 15396,
+      "missed_objects": 6,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 0.9987206581243665,
+          "roc_auc_ci95": [
+            0.9958046893978151,
+            0.9999975104696828
+          ],
+          "ap": 0.9991769686247034,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 5877,
+            "fp": 35,
+            "fn": 29,
+            "precision": 0.9940798376184032,
+            "recall": 0.9950897392482222,
+            "f1": 0.9945845320697241,
+            "f2": 0.9948875947995667,
+            "tn": 4876,
+            "accuracy": 0.9940833872607931,
+            "specificity": 0.992873141926288
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 10817,
+            "n_fire": 5906,
+            "n_not_fire": 4911,
+            "counts": {
+              "FIRE": {
+                "fire": 5250,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 627,
+                "not_fire": 35
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.004910260751777853,
+            "fire_or_review_recall": 0.9950897392482222,
+            "review_rate": 0.06119996302117038,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9971442639094042
+          }
+        },
+        "model": {
+          "roc_auc": 0.9995614798130736,
+          "roc_auc_ci95": [
+            0.9991276782830394,
+            0.9999568006938208
+          ],
+          "ap": 0.9997095069221383,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 5792,
+            "fp": 3,
+            "fn": 114,
+            "precision": 0.9994823123382226,
+            "recall": 0.980697595665425,
+            "f1": 0.9900008546278096,
+            "f2": 0.9843978381318196,
+            "tn": 4908,
+            "accuracy": 0.9891836923361376,
+            "specificity": 0.9993891264508247
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 10817,
+            "n_fire": 5906,
+            "n_not_fire": 4911,
+            "counts": {
+              "FIRE": {
+                "fire": 5792,
+                "not_fire": 3
+              },
+              "REVIEW": {
+                "fire": 94,
+                "not_fire": 90
+              },
+              "NOT_FIRE": {
+                "fire": 20,
+                "not_fire": 4818
+              }
+            },
+            "missed_fire_rate": 0.0033863867253640365,
+            "fire_or_review_recall": 0.9966136132746359,
+            "review_rate": 0.017010261625219562,
+            "fire_precision": 0.9994823123382226,
+            "false_alarm_rate": 0.0006108735491753207,
+            "auto_accuracy": 0.9978369227875482
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.999796547871448,
+          "roc_auc_ci95": [
+            0.9991937011749754,
+            0.9999942637450524
+          ],
+          "ap": 0.9998829781634597,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 5884,
+            "fp": 3,
+            "fn": 22,
+            "precision": 0.9994904025819602,
+            "recall": 0.9962749746020996,
+            "f1": 0.9978800983634358,
+            "f2": 0.9969164040527263,
+            "tn": 4908,
+            "accuracy": 0.9976888231487473,
+            "specificity": 0.9993891264508247
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 10817,
+            "n_fire": 5906,
+            "n_not_fire": 4911,
+            "counts": {
+              "FIRE": {
+                "fire": 5792,
+                "not_fire": 3
+              },
+              "REVIEW": {
+                "fire": 112,
+                "not_fire": 90
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 4818
+              }
+            },
+            "missed_fire_rate": 0.0003386386725364037,
+            "fire_or_review_recall": 0.9996613613274636,
+            "review_rate": 0.018674308958121475,
+            "fire_precision": 0.9994823123382226,
+            "false_alarm_rate": 0.0006108735491753207,
+            "auto_accuracy": 0.9995289684408856
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 35,
+                "not_fire": 32
+              },
+              "NOT_FIRE": {
+                "fire": 29,
+                "not_fire": 4876
+              }
+            },
+            "missed_fire_rate": 0.453125,
+            "fire_or_review_recall": 0.546875,
+            "review_rate": 0.013475462590506838,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 0.9940876656472987
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 49,
+                "not_fire": 3
+              },
+              "REVIEW": {
+                "fire": 13,
+                "not_fire": 90
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 4815
+              }
+            },
+            "missed_fire_rate": 0.03125,
+            "fire_or_review_recall": 0.96875,
+            "review_rate": 0.020716009654062752,
+            "fire_precision": 0.9423076923076923,
+            "false_alarm_rate": 0.0006112469437652812,
+            "auto_accuracy": 0.9989730950913945
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4972,
+            "n_fire": 64,
+            "n_not_fire": 4908,
+            "counts": {
+              "FIRE": {
+                "fire": 49,
+                "not_fire": 3
+              },
+              "REVIEW": {
+                "fire": 13,
+                "not_fire": 90
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 4815
+              }
+            },
+            "missed_fire_rate": 0.03125,
+            "fire_or_review_recall": 0.96875,
+            "review_rate": 0.020716009654062752,
+            "fire_precision": 0.9423076923076923,
+            "false_alarm_rate": 0.0006112469437652812,
+            "auto_accuracy": 0.9989730950913945
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1324,
+            "n_fire": 1321,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 729,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 592,
+                "not_fire": 3
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.44939577039274925,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1324,
+            "n_fire": 1321,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 1310,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 11,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.008308157099697885,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1324,
+            "n_fire": 1321,
+            "n_not_fire": 3,
+            "counts": {
+              "FIRE": {
+                "fire": 1310,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 11,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 3
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.008308157099697885,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4521,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4433,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 70,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 18,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.003981420039814201,
+            "fire_or_review_recall": 0.9960185799601858,
+            "review_rate": 0.015483300154833,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9959559649516962
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 4521,
+            "n_fire": 4521,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 4433,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 88,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.019464720194647202,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    },
+    "nadir_proposals": {
+      "source": "nadir_proposals",
+      "n": 2570,
+      "n_fire": 2544,
+      "n_groups": 10,
+      "bypass_fired": 1034,
+      "n_objects": 15642,
+      "missed_objects": 289,
+      "approaches": {
+        "algorithmic": {
+          "roc_auc": 1.0,
+          "roc_auc_ci95": [
+            1.0,
+            1.0
+          ],
+          "ap": 1.0,
+          "search_threshold": 60.0,
+          "search": {
+            "tp": 2544,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "tn": 26,
+            "accuracy": 1.0,
+            "specificity": 1.0
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 2570,
+            "n_fire": 2544,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 1073,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1471,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 26
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.5723735408560311,
+            "fire_precision": 1.0,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          }
+        },
+        "model": {
+          "roc_auc": 0.9896135703918723,
+          "roc_auc_ci95": [
+            0.9488505803084593,
+            0.9993646174825407
+          ],
+          "ap": 0.9998877409802062,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 2395,
+            "fp": 1,
+            "fn": 149,
+            "precision": 0.9995826377295493,
+            "recall": 0.9414308176100629,
+            "f1": 0.9696356275303644,
+            "f2": 0.9525135221126311,
+            "tn": 25,
+            "accuracy": 0.9416342412451362,
+            "specificity": 0.9615384615384616
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 2570,
+            "n_fire": 2544,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 2395,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 128,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 21,
+                "not_fire": 23
+              }
+            },
+            "missed_fire_rate": 0.008254716981132075,
+            "fire_or_review_recall": 0.9917452830188679,
+            "review_rate": 0.05058365758754864,
+            "fire_precision": 0.9995826377295493,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.990983606557377
+          }
+        },
+        "pipeline": {
+          "roc_auc": 0.9920174165457184,
+          "roc_auc_ci95": [
+            0.9493095449057486,
+            0.9999633612914863
+          ],
+          "ap": 0.9999126413893689,
+          "search_threshold": 0.9352641701698303,
+          "search": {
+            "tp": 2445,
+            "fp": 1,
+            "fn": 99,
+            "precision": 0.9995911692559281,
+            "recall": 0.9610849056603774,
+            "f1": 0.9799599198396794,
+            "f2": 0.9685469814609412,
+            "tn": 25,
+            "accuracy": 0.9610894941634242,
+            "specificity": 0.9615384615384616
+          },
+          "triage": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 2570,
+            "n_fire": 2544,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 2395,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 147,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 23
+              }
+            },
+            "missed_fire_rate": 0.0007861635220125787,
+            "fire_or_review_recall": 0.9992138364779874,
+            "review_rate": 0.05797665369649806,
+            "fire_precision": 0.9995826377295493,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.9987608426270136
+          }
+        }
+      },
+      "by_temp_band": {
+        "<80C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 175,
+            "n_fire": 149,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 149,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 26
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.8514285714285714,
+            "fire_precision": NaN,
+            "false_alarm_rate": 0.0,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 175,
+            "n_fire": 149,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 90,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 59,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 23
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.3485714285714286,
+            "fire_precision": 0.989010989010989,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.9912280701754386
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 175,
+            "n_fire": 149,
+            "n_not_fire": 26,
+            "counts": {
+              "FIRE": {
+                "fire": 90,
+                "not_fire": 1
+              },
+              "REVIEW": {
+                "fire": 59,
+                "not_fire": 2
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 23
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.3485714285714286,
+            "fire_precision": 0.989010989010989,
+            "false_alarm_rate": 0.038461538461538464,
+            "auto_accuracy": 0.9912280701754386
+          }
+        },
+        "80-200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 1862,
+            "n_fire": 1862,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 540,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 1322,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.7099892588614393,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1862,
+            "n_fire": 1862,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 1814,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 43,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 5,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0026852846401718583,
+            "fire_or_review_recall": 0.9973147153598282,
+            "review_rate": 0.02309344790547798,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9972512369433755
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 1862,
+            "n_fire": 1862,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 1814,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 46,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 2,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0010741138560687433,
+            "fire_or_review_recall": 0.9989258861439313,
+            "review_rate": 0.024704618689581095,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.998898678414097
+          }
+        },
+        ">=200C": {
+          "algorithmic": {
+            "bands": {
+              "not_fire_below": 60.0,
+              "fire_at_or_above": 150.0
+            },
+            "n": 533,
+            "n_fire": 533,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 533,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 0,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.0,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          },
+          "model": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 533,
+            "n_fire": 533,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 491,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 26,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 16,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0300187617260788,
+            "fire_or_review_recall": 0.9699812382739212,
+            "review_rate": 0.04878048780487805,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 0.9684418145956607
+          },
+          "pipeline": {
+            "bands": {
+              "not_fire_below": 0.17716628313064575,
+              "fire_at_or_above": 0.9352641701698303
+            },
+            "n": 533,
+            "n_fire": 533,
+            "n_not_fire": 0,
+            "counts": {
+              "FIRE": {
+                "fire": 491,
+                "not_fire": 0
+              },
+              "REVIEW": {
+                "fire": 42,
+                "not_fire": 0
+              },
+              "NOT_FIRE": {
+                "fire": 0,
+                "not_fire": 0
+              }
+            },
+            "missed_fire_rate": 0.0,
+            "fire_or_review_recall": 1.0,
+            "review_rate": 0.07879924953095685,
+            "fire_precision": 1.0,
+            "false_alarm_rate": NaN,
+            "auto_accuracy": 1.0
+          }
+        }
+      }
+    }
+  }
+}

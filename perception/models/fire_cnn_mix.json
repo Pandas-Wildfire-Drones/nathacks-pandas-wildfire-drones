@@ -1,0 +1,97 @@
+{
+  "model_kind": "cnn",
+  "architecture": "TinyFireNet",
+  "width": 16,
+  "patch_spec": {
+    "version": "2",
+    "size_px": 32,
+    "ground_size_m": 2.3,
+    "abs_min_c": -20.0,
+    "abs_max_c": 600.0,
+    "contrast_scale_c": 50.0,
+    "border_px": 3,
+    "channels": 2
+  },
+  "input_name": "patches",
+  "output": "logits (apply sigmoid)",
+  "scale_normalized": true,
+  "threshold": 0.9352641701698303,
+  "threshold_rule": "recall>=0.95 then max precision (pooled OOF)",
+  "confirm_threshold": 0.9352641701698303,
+  "reject_threshold": 0.17716628313064575,
+  "reject_threshold_rule": "recall>=0.99 (pooled OOF): below this a close-range candidate is FALSE_POSITIVE",
+  "confirm_threshold_rule": "precision>=0.98 then max recall (pooled OOF, single patch)",
+  "bypass_check": {
+    "trigger_c": 495.0,
+    "saturation_c": 550.0,
+    "n_negatives": 10724,
+    "neg_peak_p99_c": 76.6168441772461,
+    "neg_peak_p999_c": 87.61444091796875,
+    "neg_peak_max_c": 109.68246459960938,
+    "negatives_that_would_bypass": 0
+  },
+  "cv_summary": {
+    "precision": {
+      "mean": 0.9979893709079042,
+      "std": 0.0020012814380399534,
+      "n": 5
+    },
+    "recall": {
+      "mean": 0.9316500452583316,
+      "std": 0.08071746087348602,
+      "n": 5
+    },
+    "f1": {
+      "mean": 0.961724022665223,
+      "std": 0.04565388973943672,
+      "n": 5
+    },
+    "f2": {
+      "mean": 0.9430707151360475,
+      "std": 0.06778592979868013,
+      "n": 5
+    },
+    "accuracy": {
+      "mean": 0.9705662534278389,
+      "std": 0.01805692524110625,
+      "n": 5
+    },
+    "ap": {
+      "mean": 0.9987210497300607,
+      "std": 0.001372792836112485,
+      "n": 5
+    },
+    "roc_auc": {
+      "mean": 0.9985876396645874,
+      "std": 0.0006958324242317927,
+      "n": 5
+    }
+  },
+  "patch_stats": {
+    "patches": 24220,
+    "positives": 13496,
+    "negatives": 10724,
+    "groups": 40,
+    "scale_normalized": true,
+    "proposal_negatives_hard": 6945
+  },
+  "manifest": "exclude/data/mix_v1/manifest_split.csv",
+  "tag": "mix_v2",
+  "epochs": 20,
+  "seed": 0,
+  "onnx_parity_max_abs": 3.62396240234375e-05,
+  "created": "2026-11-08T16:40:02",
+  "torch": "2.15.0",
+  "patch_sampling": {
+    "hard_neg_per_frame": 12,
+    "hard_pos_per_frame": 4,
+    "max_gt_objects_per_frame": 6,
+    "random_neg_per_frame": 1,
+    "patch_cache": "exclude/runs/patches_mix_v2.npz"
+  },
+  "training_data": {
+    "nadir": "FLAME 3 NADIR plot 2 (both parts), history labels, every 3rd frame",
+    "composite": "flame3_composite train split",
+    "cvsubset": "Sycan weak masks, train groups, hand-label frames held out"
+  }
+}

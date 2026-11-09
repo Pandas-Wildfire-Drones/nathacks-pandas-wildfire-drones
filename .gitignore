@@ -24,3 +24,5 @@ coverage/
 *.log
 .env*
 !.env.example
+# Local secrets / environment files
+.env*

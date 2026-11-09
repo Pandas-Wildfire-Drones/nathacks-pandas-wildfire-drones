@@ -119,3 +119,68 @@ def test_sequence_increases():
     )
 
     assert second.seq > first.seq
+
+
+def test_publish_from_planned_path_creates_claim_from_cbs_route():
+    from autonomy.cbs_planner import PathRequest, plan_paths
+    from contracts.geometry import GridSpec, Position
+
+    def cell(row, col):
+        return Position(
+            x=col + 0.5,
+            y=row + 0.5,
+            z=0,
+        )
+
+    drone = make_drone()
+
+    grid = [[0, 0, 0] for _ in range(3)]
+    grid_spec = GridSpec(
+        origin=Position(x=0, y=0, z=0),
+        resolution_m=1,
+        rows=3,
+        cols=3,
+    )
+
+    request = PathRequest(
+        drone_id=drone.drone_id,
+        start=cell(0, 0),
+        goal=cell(0, 2),
+        speed_mps=10,
+        start_time=100.0,
+        altitude_band_m=(20, 30),
+    )
+
+    paths = plan_paths(
+        [request],
+        grid,
+        grid_spec,
+        minimum_separation_m=1,
+        time_step_s=0.1,
+    )
+
+    assert paths is not None
+
+    bus = FakeBus()
+    manager = PathClaimManager(bus)
+
+    message = manager.publish_from_planned_path(
+        drone=drone,
+        waypoints=paths[drone.drone_id],
+        valid_from=request.start_time,
+        time_step_s=0.1,
+        altitude_band_m=request.altitude_band_m,
+    )
+
+    assert message.sender_id == drone.drone_id
+    assert message.body.drone_id == drone.drone_id
+    assert message.body.waypoints == paths[drone.drone_id]
+    assert message.body.valid_from == 100.0
+    assert message.body.valid_until > message.body.valid_from
+    assert message.body.altitude_band_m == (20, 30)
+
+    assert len(bus.published) == 1
+
+    topic, published_message = bus.published[0]
+    assert topic == "swarm/path_claims"
+    assert published_message == message

@@ -29,7 +29,7 @@ import numpy as np
 
 from contracts import Detection, DetectorKind, ThermalCameraSpec, ThermalFrame
 
-from ..patches import patch_window_px
+from ..patches import patch_window_px, per_centre_gsd
 from .classifiers import PatchClassifier
 from .threshold import Blob, ThresholdDetector
 
@@ -105,18 +105,25 @@ class FusedDetector:
         scale_ok = getattr(self.classifier, "scale_normalized", False)
         return patch_window_px(gsd_m if scale_ok else None, spec) if spec is not None else 32.0
 
-    def score_blobs(self, temp_c: np.ndarray, gsd_m: float | None = None) -> tuple[list[Blob], np.ndarray]:
+    @staticmethod
+    def _blob_gsd(gsd_m, blobs: list[Blob]):
+        """gsd_m may be a scalar (nadir), one value per blob, or a callable v -> GSD (oblique offline frames)."""
+        if callable(gsd_m):
+            return np.array([gsd_m(b.v) for b in blobs], dtype=np.float64)
+        return gsd_m
+
+    def score_blobs(self, temp_c: np.ndarray, gsd_m=None) -> tuple[list[Blob], np.ndarray]:
         """All proposals with their classifier probabilities (used by evaluation to sweep thresholds)."""
         blobs = self.proposer.blobs(temp_c)
-        probs = self.classifier.predict_proba(temp_c, [(b.u, b.v) for b in blobs], gsd_m)
+        probs = self.classifier.predict_proba(temp_c, [(b.u, b.v) for b in blobs], self._blob_gsd(gsd_m, blobs))
         return blobs, np.asarray(probs, dtype=np.float32)
 
     def bypass_reasons(self, temp_c, blobs, gsd_m=None, exclusions=None, saturation_c=None) -> list[str | None]:
         rule = self.bypass.with_saturation(saturation_c)
-        w = self._window_px(gsd_m)
-        return [rule.reason(temp_c, b, w, exclusions) for b in blobs]
+        gs = per_centre_gsd(self._blob_gsd(gsd_m, blobs), len(blobs))
+        return [rule.reason(temp_c, b, self._window_px(g), exclusions) for b, g in zip(blobs, gs)]
 
-    def decide(self, temp_c: np.ndarray, blobs: list[Blob], probs: np.ndarray, gsd_m: float | None = None,
+    def decide(self, temp_c: np.ndarray, blobs: list[Blob], probs: np.ndarray, gsd_m=None,
                exclusions: list[ExclusionZone] | None = None, threshold: float | None = None,
                saturation_c: float | None = None) -> list[Detection]:
         thr = self.threshold if threshold is None else threshold

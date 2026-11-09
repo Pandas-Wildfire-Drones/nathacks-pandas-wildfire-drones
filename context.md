@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.1` · `contract_version: 0.3.0` · last updated 2026-11-08
+`context_version: 0.3.5` · `contract_version: 0.3.0` · last updated 2026-11-08
 
 ---
 
@@ -333,7 +333,7 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
 - **Perception ML decisions (2026-11-07, workstream C):**
   - **Verifier = small CNN (PRIMARY)** on 32×32 °C patches (2 channels: absolute temperature, local contrast) centred on `ThresholdDetector` proposals, exported to **ONNX** (not pickle). **GBM on hand-made blob features = STRETCH**, same folds, kept only as a comparison. Preprocessing lives once in `perception/patches.py` (versioned).
   - **Two operating points, one model** (decision 0004): SEARCH threshold is **recall-first** (recall ≥ 0.95 on CV, then max precision; a miss costs more than a seeker INVESTIGATE pass); CONFIRM threshold is **precision-first** (precision ≥ 0.98, then max recall; a confirmation can send an extinguisher). F1 is still reported against the >90% criterion; accuracy is shown but not trusted (class imbalance). `[ASSUMPTION]` 0.95 / 0.98 targets.
-  - **Scale-normalized patches (PatchSpec v2):** when the GSD is known, each patch is a fixed 2.3 m ground window resampled in radiance. `[VERIFY]` On synthetic data plain crops did as well (decision 0004 A/B), because synthetic decoys separate on temperature alone; re-run the A/B on real data (`train_cnn --no-scale-normalize`). Datasets need altitude/GSD per frame (`gsd_m` manifest column).
+  - **Scale-normalized patches (PatchSpec v2):** when the GSD is known, each patch is a fixed 2.3 m ground window resampled in radiance. `[VERIFY]` On synthetic data plain crops did as well (decision 0004 A/B), because synthetic decoys separate on temperature alone; re-run on FLAME 3 composites (2026-11-07, issue #4): still a tie (test object F1 0.940 scaled vs 0.934 plain), so v2 stays the default; the synthetic-only model drops to F1 0.70 on real backgrounds while the composite model keeps 0.95 on the night synthetic set (decision 0004 update). Datasets need a GSD per frame (`gsd_m`) or view geometry for oblique frames (`agl_m`, `pitch_deg`, `focal_px`).
   - **Close-range thresholds:** three bands — CONFIRMED above the confirm bar (precision ≥ 0.98, never below search), FALSE_POSITIVE only below a bar keeping recall ≥ 0.99, otherwise inconclusive → escalate to a human (this removed 9/9 wrongly rejected fires on synthetic data).
   - **Close range:** `perception/confirm.py` — `HotspotConfirmer` (INVESTIGATE: multi-frame mean probability vs the confirm threshold) and `SuppressionChecker` (VERIFY after a drop: physics, "anything still ≥ 15 °C above background?", reports SUPPRESSED only).
   - **Hot-blob bypass** (decision 0003): ≥ 3 px at ≥ 0.9 × the current gain mode's saturation, or a blob larger than the patch window and ≥ 150 °C; no bypass near friendly drones or known industrial heat. Never skips confirmation.
@@ -346,9 +346,12 @@ So a nearby basin delivers about **4×** more water per kg of fuel than a 5 km s
     - **Training data = synthetic fires on real FLAME 3 No-Fire backgrounds** (`python -m training.composite`): exact masks, radiance mixing, real clutter and noise, groups kept. `objects.csv` gives each fire's observed band for per-band F1. Plain synthetic data (`perception/synth.py`) stays the night test set.
     - **Workflow:** `training/train_verifier.ipynb` runs the loop (data → composites → group split → patches → CV with plots → ONNX → test once → hand-labelled band), calling the same modules as the CLI. Laptop is enough (tiny CNN); Colab only needs `patches.npz` (tens of MB). Raw data never goes to GitHub or Drive in bulk.
     - **Hand-labelled hard band (optional test set):** `training/label_tool.py`. A person labels 80–200 °C blobs from the paired RGB photo; Cohen's kappa checks agreement between two labellers.
-    - **FLAME 3 cameras** `[SOURCED S13 Table III]`: Autel 640T (Hanna Hammock, Hundred, Wild Bill), M30T (Sycan), M2EA (Shoetank, Willamette), all 640×512. **High gain clips at 150 °C** (inside the hard band), low gain at 450–550 °C. Thermal GSD ≈ 17.6 cm/px at 122 m nadir (M30T); oblique frames 61–122 m. No-Fire frames are mostly pre-burn oblique imagery.
+    - **FLAME 3 cameras** `[SOURCED S13 Table III]`: Autel 640T (Hanna Hammock, Hundred, Wild Bill), M30T (Sycan), M2EA (Shoetank, Willamette), all 640×512. Paper: high gain clips at 150 °C, low gain at 450–550 °C; GSD ≈ 17.6 cm/px at 122 m nadir (M30T).
+    - **Sycan CV subset, measured on the download** (`training/FLAME3.md` table; `python -m training.build_manifest_flame3`): 622 Fire + 116 No Fire, captured 15:00–19:23 local (day/dusk). **Every frame is oblique** (gimbal pitch median −15°, range −46…+12°), 55–124 m above takeoff, so GSD changes per row (centre median ≈ 0.32 m/px, 4–14× coarser than our seeker). Geometry comes from the raw RGB's DJI XMP (height, pitch, laser-rangefinder slant range); focal ≈ 696 px. M30T clips measured at **187.4 °C (high gain) / 608.7 °C (low gain)**. **All 84 Fire frames with max T in 80–200 °C are high-gain frames** (67 exactly at the clip), so frame-level "hard band" Sycan data is clipping, not smouldering. File stems are shuffled and restart per class folder: pair by folder + stem, order by EXIF time. Manifests now carry optional `agl_m`, `pitch_deg`, `focal_px`, `saturation_c`, `rgb_path`, `timestamp` (`perception/datasets.py`); patches, composites and evaluation use a per-row GSD on oblique frames.
+    - **Approach comparison + triage (2026-11-08):** `training/compare_approaches.ipynb` (sliders) / `python -m training.compare handlabels|manifest` score algorithmic (peak °C), CNN alone, and full pipeline on the same proposals, with FIRE / REVIEW / NOT_FIRE bands (`perception/triage.py`; defaults = sidecar reject/confirm). **Hand-label result (DoqCA, 98 usable of 297, 199 unsure):** no approach separates fire from not-fire in 80–200 °C (AUC CIs include 0.5). At the search threshold the pipeline drops 7/78 labelled fires that the threshold alone keeps, because composites contain almost no hot non-fire examples (test split 80–200 °C: 58 fire vs 3 non-fire). The 20 negatives are suspect (compact 100–180 °C spots, several in smoke). Numbers: `perception/RESULTS.md`. p(fire) is not calibrated (pos_weight); see issue tracker.
+    - **FLAME 3 NADIR + mix model (2026-11-08):** NADIR thermal (Hanna Hammock, nadir, 0.13–0.16 m/px, georeferenced stacks; `training/FLAME3.md`) downloaded with `python -m training.download_flame3_nadir` (one Kaggle API call + HTTP Range reads; per-file calls hit 429). **Labels from each pixel's history** (`training/build_nadir.py`): fire = ≥ 120 °C or burned and ≥ 25 °C above its post-peak floor; not fire = unburned, or burnt out at the ~43–45 °C char plateau; rest = ignore (mask value 2, new `perception.datasets.MASK_IGNORE`, honoured by patches, evaluation and comparison). Plot 1 = test, plot 2 = train. **Sycan weak masks** (`training/build_sycan_weak.py`): clipped/≥ 200 °C pixels in Fire frames = fire, No-Fire frames = not fire, rest ignored; hand-label frames never trained on. `perception/models/fire_cnn_mix.onnx` (`mix_v2`) trains on all three with capped mask-centred positives and hard examples from the masks. Pooled test pipeline F1 0.998 (vs 0.952), NADIR CNN recall 0.997 (vs 0.73); hand-band unchanged. Six test views + matrix: `training/eval_sets.py`, `training/compare_approaches.ipynb`, `perception/RESULTS.md` (`matrix_mix_v2`). Caveats: NADIR is daylight; nadir/cvsubset labels only cover clear cases (temperature separates them by construction).
     - HIT-UAV and BIRDSAI [S21] are **8-bit** (HIT-UAV "bit depth is 8"; BIRDSAI real frames are `.jpg`): no °C, so they can't feed the temperature-channel CNN.
-    - The Kaggle subset is **one burn**, so groups = time blocks.
+    - The Kaggle subset is **one burn**, so groups = day × 250 m ground cell of the image-centre ground point (37 groups; No Fire 14).
     - Citation (requested by the authors) and full notes: `training/FLAME3.md`. Data list: `exclude/DATA_SOURCES.md`; workflow: `exclude/training_README.md` (local, gitignored).
 
 ---
@@ -1359,7 +1362,7 @@ def decode(raw: bytes | str) -> SwarmMessage:
     return SwarmMessage.model_validate_json(raw)
 ```
 
-#### `contracts/topics.py` (129 lines)
+#### `contracts/topics.py` (130 lines)
 
 ```python
 """Topic names and matching rules.
@@ -1373,12 +1376,8 @@ Wildcards in SUBSCRIPTION patterns:
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from .enums import MessageType
-
-if TYPE_CHECKING:
-    from .messages import SwarmMessage
+from .messages import ClusterUpdate, LeaderClaim, SwarmMessage, TaskAnnounce, TaskBid
 
 __all__ = [
     "ROUTES", "topic_for", "topic_matches", "validate_pattern",
@@ -1431,24 +1430,29 @@ def sub_cluster(cluster_id: str) -> str:
 
 
 def _validate_cluster_id(cluster_id: str) -> None:
-    if not cluster_id or any(char in cluster_id for char in "/#*+") or any(char.isspace() for char in cluster_id):
-        raise ValueError("cluster_id must be a non-empty topic segment without wildcards or whitespace")
+    invalid_character = any(
+        char in cluster_id for char in "/#*+"
+    ) or any(char.isspace() for char in cluster_id)
+    if not cluster_id or invalid_character:
+        raise ValueError(
+            "cluster_id must be a non-empty topic segment without wildcards or whitespace"
+        )
 
 
-def _cluster_id_for(msg: "SwarmMessage") -> str | None:
+def _cluster_id_for(msg: SwarmMessage) -> str | None:
     body = msg.body
-    if msg.msg_type is MessageType.CLUSTER_UPDATE:
+    if isinstance(body, ClusterUpdate):
         return body.cluster.cluster_id
-    if msg.msg_type is MessageType.LEADER_CLAIM:
+    if isinstance(body, LeaderClaim):
         return body.cluster_id
-    if msg.msg_type is MessageType.TASK_ANNOUNCE:
+    if isinstance(body, TaskAnnounce):
         return body.task.cluster_id
-    if msg.msg_type is MessageType.TASK_BID:
+    if isinstance(body, TaskBid):
         return body.cluster_id
     return None
 
 
-def topic_for(msg: "SwarmMessage") -> str:
+def topic_for(msg: SwarmMessage) -> str:
     """Topic a message should be published on. Directed messages require receiver_id."""
     pattern = ROUTES[msg.msg_type]
     cluster_id = _cluster_id_for(msg)
@@ -1990,7 +1994,11 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-08 | merge (C) | v0.3.5: merged `main` into `DoqCA/flame3-geometry` (contracts 0.3.0 cluster coordination, per-drone autonomy, CBS deconfliction, mission planning); resolved `.gitignore` (main's layout + `.env*`) and this header/changelog; no contract changes on this side | keep the perception branch current with main |
+| 2026-11-08 | perception chat (C) | v0.3.4: FLAME 3 NADIR downloaded + history-labelled (`build_nadir.py`), Sycan weak masks (`build_sycan_weak.py`), ignore masks (`MASK_IGNORE`) through datasets/evaluation/patches/evaluate/compare, hard-example sampling + GT cap in `patch_data.py`/`train_cnn.py`, point-level NADIR view, six test views + matrix CLI (`eval_sets.py`), notebook rebuilt (models × views), `fire_cnn_mix.onnx` (mix_v2) recommended; `imagecodecs` in `[train]`; 120 tests; no contract changes | user asked to train/test on NADIR and see all test combinations |
+| 2026-11-08 | perception chat (C) | v0.3.3: `perception/triage.py` (FIRE/REVIEW/NOT_FIRE bands), `training/compare.py` + `compare_plots.py` + `compare_approaches.ipynb` (three approaches, threshold sliders, ROC/PR, sweep heatmaps, reliability, error gallery); hand-label comparison in RESULTS.md; `ipywidgets` in `[train]`; 114 tests; no contract changes | user asked where to compare model / algorithmic / pipeline and try 3-band thresholds |
 | 2026-11-08 | cluster coordination | Contracts 0.3.0: added cluster membership/lease snapshots, optional cluster identity and term fields, cluster update messages, and cluster-scoped routing for updates, leader claims, task announcements, and bids | Establish additive contract support for cluster-level swarm coordination |
+| 2026-11-07 | FLAME 3 data chat (C) | v0.3.2: `build_manifest_flame3` rewritten for the shipped Sycan layout (oblique geometry from DJI XMP, gain modes 187.4/608.7 °C, day × 250 m groups); per-row GSD in datasets/patches/composite/evaluate; label tool pairs RGB from the manifest, skips clipped blobs; issue #4 A/B re-run on FLAME 3 composites (tie, v2 kept); `perception/models/fire_cnn_flame3comp.onnx`; 108 tests; no contract changes | data now downloaded; old builder was a pre-download guess |
 | 2026-11-07 | FLAME 3 / CI chat | v0.3.1: §10 FLAME 3 `[VERIFY]` resolved from the paper (labels = max-T heuristic + manual review of 80–200 °C; no masks described); `training/FLAME3.md` with the requested citation; `training/composite.py` (synthetic fires on real No-Fire backgrounds, 6 tests); `training/label_tool.py` (hand-label hard band, 4 tests); `training/train_verifier.ipynb` (whole training loop); FLAME 3 cameras/gain/GSD from Table III; matplotlib + ipykernel in `[train]`; HIT-UAV/BIRDSAI ruled out (8-bit); CI workflow `.github/workflows/tests.yml` (§3, §5, §11); §12 item 9 reworded; no contract changes | user asked whether FLAME 3 thresholds its labels; dataset authors request citation; CI for main |
 | 2026-11-07 | perception chat (C) | decisions 0001 (ACCEPTED A) – 0004 in `docs/decisions/`; PatchSpec v2 scale-normalized patches; confirm/verify stage (`perception/confirm.py`, `evaluate_confirm.py`); precision-first confirm threshold; hot-blob bypass rule replaces 300 °C; sensor wiring (`frame_context.py`, `terrain.py`, `distortion.py`); seeker altimeter in §6.3; no contract changes | user decisions on altitude, bypass, sensors, confirm stage |
 | 2026-11-07 | perception chat (C) | added `training/check_masks.py` (mask audit), decision doc 0001 (altitude vs lidar, PROPOSED), §12 items 10–11 (altimeter gap, Boson+ saturation 350 °C vs config 550 °C) | follow-up questions on masks, lidar, hot-bypass |

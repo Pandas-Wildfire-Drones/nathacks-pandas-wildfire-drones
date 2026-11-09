@@ -283,7 +283,12 @@ def test_healthy_drone_can_continue_to_controller():
     )
 
     drone = make_drone()
-    adapter = SwarmAutonomyAdapter(drone, controller, FakeBus())
+    adapter = SwarmAutonomyAdapter(
+        drone,
+        controller,
+        FakeBus(),
+        altitude_agl_provider=lambda _drone: 20.0,
+    )
 
     task = make_task()
     hotspot = make_hotspot()
@@ -379,7 +384,7 @@ def test_conflicting_remote_path_is_detected():
             Position(x=10, y=1, z=20),
         ],
         valid_from=100,
-        valid_until=120,
+        valid_until=101,
         altitude_band_m=(15, 25),
     )
 

@@ -22,7 +22,8 @@ from scipy import ndimage
 
 __all__ = [
     "binary_metrics", "metrics_from_counts", "choose_threshold_recall_first", "choose_threshold_precision_first", "average_precision", "roc_auc",
-    "GtObject", "gt_objects_from_mask", "match_detections", "blob_label", "bootstrap_ci", "summarize_folds",
+    "GtObject", "gt_objects_from_mask", "match_detections", "blob_label", "BLOB_IGNORE", "drop_ignored", "bootstrap_ci",
+    "summarize_folds",
 ]
 
 
@@ -179,12 +180,31 @@ def match_detections(dets_uv: list[tuple[float, float]], gts: list[GtObject], to
     return {"tp": tp, "fp": fp, "fn": len(gts) - len(matched_gt), "duplicates": dup, "pairs": pairs}
 
 
-def blob_label(bbox: tuple[float, float, float, float], mask: np.ndarray, tol_px: int = 1) -> int:
+BLOB_IGNORE = -1
+
+
+def blob_label(bbox: tuple[float, float, float, float], mask: np.ndarray, tol_px: int = 1,
+               ignore: np.ndarray | None = None) -> int:
     """1 if the fire mask has any pixel inside the blob bbox grown by tol_px. Used to label proposals for
-    training AND for patch-level evaluation, so both use the same definition of a 'fire' proposal."""
+    training AND for patch-level evaluation, so both use the same definition of a 'fire' proposal.
+    With an `ignore` mask: no fire but touching an ignore pixel -> BLOB_IGNORE (-1): skip it in training and scoring."""
     u0, v0, u1, v1 = (int(x) for x in bbox)
     h, w = mask.shape
-    return int(mask[max(v0 - tol_px, 0):min(v1 + tol_px, h), max(u0 - tol_px, 0):min(u1 + tol_px, w)].any())
+    win = (slice(max(v0 - tol_px, 0), min(v1 + tol_px, h)), slice(max(u0 - tol_px, 0), min(u1 + tol_px, w)))
+    if mask[win].any():
+        return 1
+    if ignore is not None and ignore[win].any():
+        return BLOB_IGNORE
+    return 0
+
+
+def drop_ignored(dets_uv: list[tuple[float, float]], ignore: np.ndarray | None, tol_px: int = 1):
+    """Remove detections whose centroid falls in (or within tol_px of) an ignore region: they are neither TP nor FP."""
+    if ignore is None or not dets_uv:
+        return list(dets_uv)
+    grown = ndimage.binary_dilation(ignore, iterations=tol_px) if tol_px > 0 else ignore
+    h, w = grown.shape
+    return [(u, v) for u, v in dets_uv if not grown[min(max(int(v), 0), h - 1), min(max(int(u), 0), w - 1)]]
 
 
 def bootstrap_ci(per_unit_counts: list[tuple[int, int, int]], metric: str = "f1", n_boot: int = 1000,

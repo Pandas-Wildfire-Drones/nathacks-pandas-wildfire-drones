@@ -24,6 +24,7 @@ Pixel convention (same as georef.py): pixel (row r, col c) covers [c, c+1) x [r,
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -32,7 +33,7 @@ from scipy import ndimage
 from .radiometry import planck_radiance, radiance_to_temp
 
 __all__ = ["PatchSpec", "PATCH_SPEC", "extract_patch", "extract_patch_scaled", "extract_patches",
-           "normalize_patch", "normalize_patches", "patch_window_px"]
+           "normalize_patch", "normalize_patches", "patch_window_px", "GsdArg", "per_centre_gsd"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,19 @@ class PatchSpec:
 
 
 PATCH_SPEC = PatchSpec()
+
+# A GSD argument is one value for the whole frame (nadir camera, the drone case) or one value per centre (oblique
+# training/evaluation frames, where the GSD changes row by row: perception.datasets.FrameRecord.gsd_rows).
+GsdArg = float | Sequence[float] | np.ndarray | None
+
+
+def per_centre_gsd(gsd_m: GsdArg, n: int) -> list[float | None]:
+    if gsd_m is None or np.isscalar(gsd_m):
+        return [None if gsd_m is None else float(gsd_m)] * n
+    g = [float(x) for x in gsd_m]
+    if len(g) != n:
+        raise ValueError(f"got {len(g)} GSD values for {n} centres")
+    return g
 
 
 def patch_window_px(gsd_m: float | None, spec: PatchSpec = PATCH_SPEC) -> float:
@@ -110,8 +124,10 @@ def normalize_patch(patch_c: np.ndarray, spec: PatchSpec = PATCH_SPEC) -> np.nda
 
 
 def extract_patches(temp_c: np.ndarray, centers_uv: list[tuple[float, float]], spec: PatchSpec = PATCH_SPEC,
-                    gsd_m: float | None = None) -> np.ndarray:
-    """Batch of normalized patches, shape (N, C, P, P). gsd_m given -> scale-normalized patches."""
+                    gsd_m: GsdArg = None) -> np.ndarray:
+    """Batch of normalized patches, shape (N, C, P, P). gsd_m given (scalar or per centre) -> scale-normalized."""
     if not centers_uv:
         return np.zeros((0, spec.channels, spec.size_px, spec.size_px), dtype=np.float32)
-    return normalize_patches(np.stack([extract_patch_scaled(temp_c, u, v, gsd_m, spec) for u, v in centers_uv]), spec)
+    gs = per_centre_gsd(gsd_m, len(centers_uv))
+    return normalize_patches(np.stack([extract_patch_scaled(temp_c, u, v, g, spec)
+                                       for (u, v), g in zip(centers_uv, gs)]), spec)

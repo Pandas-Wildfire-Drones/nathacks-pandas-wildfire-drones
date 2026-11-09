@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from contracts.entities import DroneState, Hotspot, Task, Zone
 from contracts.enums import (
     DroneKind,
+    DroneStatus,
     HotspotStatus,
     TaskStatus,
     TaskType,
@@ -50,6 +51,26 @@ class DroneController:
 
         self._active_task_id: str | None = None
         self._terminal_result: MissionExecutionResult | None = None
+        self._active_path: tuple[Position, ...] | None = None
+        self._path_index = 0
+
+    @property
+    def ready_for_mission(self) -> bool:
+        """Whether navigation and payload execution can start a new mission."""
+        return (
+            self.autopilot is not None
+            and self.payload is not None
+            and self._active_task_id is None
+            and self._terminal_result is None
+        )
+
+    @property
+    def active_path(self) -> tuple[Position, ...] | None:
+        """Return the unflown portion of the active planned route."""
+        if self._active_path is None:
+            return None
+
+        return self._active_path[self._path_index:]
 
     # ---------------------------------------------------------
     # Planning
@@ -182,6 +203,7 @@ class DroneController:
         hotspot: Hotspot,
         task: Task,
         cruise_speed_mps: float | None = None,
+        planned_path: list[Position] | None = None,
     ) -> MissionExecutionResult:
         """
         Start an extinguishing mission.
@@ -193,6 +215,14 @@ class DroneController:
         if self.autopilot is None or self.payload is None:
             raise RuntimeError(
                 "Mission execution requires an autopilot and payload"
+            )
+
+        if drone.status in (
+            DroneStatus.FAULT,
+            DroneStatus.LOST,
+        ):
+            raise ValueError(
+                f"Drone is unavailable: {drone.status.value}"
             )
 
         if self._active_task_id is not None:
@@ -248,12 +278,18 @@ class DroneController:
                 "Hotspot is not confirmed for extinguishing"
             )
 
-        self._active_task_id = task.task_id
+        if planned_path is not None and not planned_path:
+            raise ValueError("Planned path must contain at least one waypoint")
 
+        active_path = tuple(planned_path) if planned_path is not None else None
         self.autopilot.goto(
-            hotspot.position,
+            active_path[0] if active_path is not None else hotspot.position,
             speed_mps=cruise_speed_mps,
         )
+
+        self._active_path = active_path
+        self._path_index = 0
+        self._active_task_id = task.task_id
 
         return MissionExecutionResult(
             status="TRANSIT",
@@ -261,6 +297,35 @@ class DroneController:
             water_used_l=0.0,
             reason="Navigating to assigned hotspot",
         )
+
+    def replace_active_path(
+        self,
+        planned_path: list[Position],
+        *,
+        cruise_speed_mps: float | None = None,
+    ) -> None:
+        """Replace an active route after a newly published safe claim."""
+        if self.autopilot is None:
+            raise RuntimeError(
+                "Route replacement requires an autopilot"
+            )
+
+        if self._active_task_id is None:
+            raise RuntimeError(
+                "Cannot replace a route without an active mission"
+            )
+
+        if not planned_path:
+            raise ValueError(
+                "Replacement path must contain at least one waypoint"
+            )
+
+        self.autopilot.goto(
+            planned_path[0],
+            speed_mps=cruise_speed_mps,
+        )
+        self._active_path = tuple(planned_path)
+        self._path_index = 0
 
     def step_extinguish(
         self,
@@ -281,6 +346,23 @@ class DroneController:
             raise RuntimeError(
                 "Mission execution requires an autopilot and payload"
             )
+        if drone.status in (
+            DroneStatus.FAULT,
+            DroneStatus.LOST,
+        ):
+            self.autopilot.hold()
+
+            result = MissionExecutionResult(
+                status="ABORTED",
+                success=False,
+                water_used_l=0.0,
+                reason=f"Drone is unavailable: {drone.status.value}",
+            )
+
+            self._active_task_id = None
+            self._active_path = None
+            self._path_index = 0
+            return result
 
         # Once a mission has completed, return the exact same terminal
         # result and never release payload again.
@@ -294,6 +376,38 @@ class DroneController:
                 water_used_l=0.0,
                 reason="No active mission for this task",
             )
+
+        if self._active_path is not None:
+            if not self.autopilot.at_target():
+                return MissionExecutionResult(
+                    status="TRANSIT",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Drone has not reached the current route waypoint",
+                )
+
+            if self._path_index + 1 < len(self._active_path):
+                next_index = self._path_index + 1
+                self.autopilot.goto(
+                    self._active_path[next_index],
+                )
+                self._path_index = next_index
+                return MissionExecutionResult(
+                    status="TRANSIT",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Continuing along the planned route",
+                )
+
+            if self._active_path[-1] != hotspot.position:
+                self._active_path = None
+                self.autopilot.goto(hotspot.position)
+                return MissionExecutionResult(
+                    status="TRANSIT",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Approaching the hotspot from the planned route",
+                )
 
         # Do not release while the drone is still travelling.
         if not self.autopilot.at_target(
@@ -324,6 +438,11 @@ class DroneController:
                 reason=decision.reason,
             )
 
+            self._terminal_result = result
+            self._active_task_id = None
+            self._active_path = None
+            self._path_index = 0
+
             return result
 
         released = self.payload.release(
@@ -346,6 +465,8 @@ class DroneController:
 
             self._terminal_result = result
             self._active_task_id = None
+            self._active_path = None
+            self._path_index = 0
 
             return result
 
@@ -358,5 +479,7 @@ class DroneController:
 
         self._terminal_result = result
         self._active_task_id = None
+        self._active_path = None
+        self._path_index = 0
 
         return result
