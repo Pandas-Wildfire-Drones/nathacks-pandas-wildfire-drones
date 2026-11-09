@@ -12,6 +12,9 @@ export interface MapOpts {
   selected?: string | null;
   planLines?: [string, string][];
   footprint?: number; // camera swath (m) to draw around the player
+  zones?: boolean; // seeker search zones (swarm brain zone split)
+  links?: boolean; // extinguisher -> hotspot assignment lines
+  highlight?: string | null; // drone the camera follows
 }
 
 const off = document.createElement("canvas");
@@ -87,10 +90,56 @@ export function drawMap(ctx: CanvasRenderingContext2D, size: number, opts: MapOp
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, 0, 0, size, size);
   }
+  const s = size / (2 * R);
+  // lakes (refill points) / dry basins
+  for (const [id, wet, , outline] of init.lakes ?? []) {
+    ctx.beginPath();
+    outline.forEach(([x, y], i) => {
+      const [px, py] = toCanvas(x, y, size, R);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fillStyle = wet ? "rgba(40,110,190,0.85)" : "rgba(92,76,58,0.75)";
+    ctx.strokeStyle = wet ? "#59b8ff" : "#8a7458";
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+    if (size > 300) {
+      let cx = 0, cy = 0;
+      for (const [x, y] of outline) {
+        cx += x / outline.length;
+        cy += y / outline.length;
+      }
+      const [px, py] = toCanvas(cx, cy, size, R);
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      ctx.font = "600 10px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(wet ? id : `${id} dry`, px, py + 3);
+    }
+  }
+  // seeker zones
+  if (opts.zones && init.zones) {
+    ctx.strokeStyle = "rgba(180,156,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    for (const pts of Object.values(init.zones)) {
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => {
+        const [px, py] = toCanvas(x, y, size, R);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
   // grid
   ctx.strokeStyle = "rgba(120,170,255,0.08)";
   ctx.lineWidth = 1;
-  for (let m = -150; m <= 150; m += 50) {
+  const step = R > 300 ? 100 : 50;
+  for (let m = -Math.floor(R / step) * step; m <= R; m += step) {
     const [a] = toCanvas(m, 0, size, R);
     const [, b] = toCanvas(0, m, size, R);
     ctx.beginPath();
@@ -109,7 +158,6 @@ export function drawMap(ctx: CanvasRenderingContext2D, size: number, opts: MapOp
   ctx.fill();
   ctx.stroke();
 
-  const s = size / (2 * R);
   // plan lines (swarm plan in watch mode)
   if (opts.planLines) {
     const hs = new Map(store.hotspots.map((h) => [h[0], h]));
@@ -177,13 +225,38 @@ export function drawMap(ctx: CanvasRenderingContext2D, size: number, opts: MapOp
       }
     }
   }
+  // assignment lines (extinguisher -> target hotspot)
+  if (opts.links && store.links.length) {
+    const hs = new Map(store.hotspots.map((h) => [h[0], h]));
+    const ds = new Map(store.drones.map((d) => [d[0], d]));
+    ctx.strokeStyle = "rgba(79,209,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const [did, hid] of store.links) {
+      const d = ds.get(did), h = hs.get(hid);
+      if (!d || !h) continue;
+      const [ax, ay] = toCanvas(d[2], d[3], size, R);
+      const [bx2, by2] = toCanvas(h[1], h[2], size, R);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx2, by2);
+    }
+    ctx.stroke();
+  }
   // drones
   if (opts.drones) {
+    const small = R > 300 && size < 300;
     for (const [id, kind, x, y, , yaw, , , isPlayer] of store.drones) {
       if (isPlayer && opts.playerPose) continue;
       const [px, py] = toCanvas(x, y, size, R);
-      ctx.fillStyle = kind === "s" ? "#b49cff" : store.init?.mode === "watch" ? "#4fd1ff" : "#ffb547";
-      arrow(ctx, px, py, yaw, kind === "e" ? 5 : 4);
+      ctx.fillStyle = kind === "s" ? "#b49cff" : store.init?.mode !== "play" ? "#4fd1ff" : "#ffb547";
+      arrow(ctx, px, py, yaw, (kind === "e" ? 5 : 4) * (small ? 0.6 : 1));
+      if (opts.highlight === id) {
+        ctx.strokeStyle = "#7dffb2";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       if (opts.selected === id) {
         ctx.strokeStyle = "#fff";
         ctx.beginPath();

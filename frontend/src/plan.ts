@@ -25,7 +25,7 @@ export class PlanScreen {
         <div class="eyebrow" id="plan-eyebrow">Planning · 30 s</div>
         <h2 id="plan-title">Send your extinguishers</h2>
         <p class="muted" id="plan-help">Pick a bot, then click a detected fire (direct task) or any spot (it will
-          work the nearest known fires within 45 m). Unassigned bots stay at base. You fly the 10th drone yourself.</p>
+          work the nearest known fires within 45 m). Unassigned bots stay at base. You fly one extinguisher yourself.</p>
         <div class="bots" id="plan-bots"></div>
         <div class="plan-actions">
           <button class="btn ghost" id="plan-auto">Spread over fires</button>
@@ -64,8 +64,8 @@ export class PlanScreen {
     this.el.classList.toggle("readonly", readonly);
     this.$("#plan-title").textContent = readonly ? "Swarm brain is allocating" : "Send your extinguishers";
     this.$("#plan-help").textContent = readonly
-      ? "Stub task assigner (sim/brain_stub.py): each idle extinguisher takes the nearest confirmed hotspot. The real swarm-brain allocator replaces it."
-      : "Pick a bot, then click a detected fire (direct task) or any spot (it works the nearest known fires within 45 m of it). Unassigned bots stay at base. You fly the 10th drone yourself.";
+      ? "Swarm brain (core/allocation.py): confirmed fires go on a max-heap by size × growth × heat; the highest goes to the extinguisher with the lowest refill-aware ETA, then the next."
+      : "Pick a bot, then click a detected fire (direct task) or any spot (it works the nearest known fires within 45 m of it). Unassigned bots stay at base. You fly one extinguisher yourself.";
     this.el.classList.remove("hidden");
     this.layout();
     this.renderBots();

@@ -79,6 +79,12 @@ export class World3D {
   private dummy = new THREE.Object3D();
   hidePlayerMesh = false;
   followId: string | null = null;
+  /** distance the follow camera eases to after a switch; null once the user orbits/zooms (their view wins) */
+  followDist: number | null = null;
+  private highlight: THREE.Group | null = null;
+  private linkLines: THREE.LineSegments | null = null;
+  private links: [string, string][] = [];
+  private flameScale = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -92,8 +98,10 @@ export class World3D {
     this.orbit = new OrbitControls(this.camera, canvas);
     this.orbit.enableDamping = true;
     this.orbit.maxPolarAngle = Math.PI * 0.47;
-    this.orbit.minDistance = 20;
-    this.orbit.maxDistance = 700;
+    this.orbit.minDistance = 12;
+    this.orbit.maxDistance = 1400;
+    this.orbit.zoomSpeed = 1.2;
+    this.orbit.addEventListener("start", () => (this.followDist = null));
     this.camera.position.set(0, 260, 300);
     this.orbit.target.set(0, 0, 0);
     this.addSky();
@@ -149,6 +157,9 @@ export class World3D {
     this.fireCells = [];
     this.lastDropSeq = 0;
     const R = init.arena_radius;
+    const big = R > 300;
+    (this.scene.fog as THREE.FogExp2).density = big ? 0.0011 : 0.0021;
+    this.flameScale = init.raster_cell / 2;
 
     // outer ground (outside the geofence)
     const outer = new THREE.Mesh(new THREE.CircleGeometry(R + 420, 64), new THREE.MeshStandardMaterial({ color: "#18211b", roughness: 1 }));
@@ -195,6 +206,26 @@ export class World3D {
     this.buildTrees(init);
     this.buildBase(init);
     this.buildDecoys(init);
+    this.buildLakes(init);
+
+    // highlight for the drone the camera follows (DEMO): ground ring + light column
+    const hl = new THREE.Group();
+    const hring = new THREE.Mesh(new THREE.RingGeometry(3.2, 3.9, 48), new THREE.MeshBasicMaterial({ color: "#7dffb2", transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+    hring.rotation.x = -Math.PI / 2;
+    const hbeam = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#7dffb2", transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    hbeam.name = "beam";
+    const hglow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: "#7dffb2", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    hglow.name = "glow";
+    hglow.scale.setScalar(16);
+    hl.add(hring, hbeam, hglow);
+    hl.visible = false;
+    this.root.add(hl);
+    this.highlight = hl;
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6 * 128), 3));
+    this.linkLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: "#4fd1ff", transparent: true, opacity: 0.35, depthWrite: false }));
+    this.linkLines.frustumCulled = false;
+    this.root.add(this.linkLines);
 
     // flames
     const flameGeo = new THREE.ConeGeometry(0.55, 1, 5, 1, true);
@@ -263,18 +294,48 @@ export class World3D {
     this.root.add(cones, blobs, trunks);
   }
 
+  private buildLakes(init: InitMsg): void {
+    for (const [, wet, , outline] of init.lakes ?? []) {
+      const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
+      const geo = new THREE.ShapeGeometry(shape, 2);
+      const mat = wet
+        ? new THREE.MeshStandardMaterial({ color: "#0b2740", emissive: "#062038", emissiveIntensity: 0.7, roughness: 0.12, metalness: 0.65 })
+        : new THREE.MeshStandardMaterial({ color: "#3a3127", roughness: 1 });
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.14;
+      this.root.add(m);
+      const pts = outline.map(([x, y]) => W(x, y, 0.3));
+      const rim = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: wet ? "#59b8ff" : "#7a6650", transparent: true, opacity: wet ? 0.7 : 0.5 }));
+      this.root.add(rim);
+      if (wet) {
+        let cx = 0, cy = 0;
+        for (const [x, y] of outline) {
+          cx += x / outline.length;
+          cy += y / outline.length;
+        }
+        const l = new THREE.PointLight("#3d9bff", 25, 60, 1.6);
+        l.position.copy(W(cx, cy, 8));
+        this.root.add(l);
+      }
+    }
+  }
+
   private buildBase(init: InitMsg): void {
     const [bx, by] = init.base;
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 0.3, 6), new THREE.MeshStandardMaterial({ color: "#1a2230", roughness: 0.6, metalness: 0.2 }));
+    let padR = 22;
+    for (const [px, py] of init.pads) padR = Math.max(padR, Math.hypot(px - bx, py - (by + 8)) + 5);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(padR, padR, 0.3, 6), new THREE.MeshStandardMaterial({ color: "#1a2230", roughness: 0.6, metalness: 0.2 }));
     pad.position.copy(W(bx, by + 8, 0.15));
     this.root.add(pad);
-    const edge = new THREE.Mesh(new THREE.TorusGeometry(22, 0.25, 4, 6), new THREE.MeshBasicMaterial({ color: "#4fd1ff" }));
+    const edge = new THREE.Mesh(new THREE.TorusGeometry(padR, 0.25, 4, 6), new THREE.MeshBasicMaterial({ color: "#4fd1ff" }));
     edge.rotation.x = Math.PI / 2;
     edge.rotation.z = Math.PI / 6;
     edge.position.copy(W(bx, by + 8, 0.35));
     this.root.add(edge);
+    const small = init.mode === "demo";
     for (const [px, py] of init.pads) {
-      const m = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.6, 24), new THREE.MeshBasicMaterial({ color: "#ffd166", side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(small ? new THREE.RingGeometry(1.2, 1.45, 20) : new THREE.RingGeometry(2.2, 2.6, 24), new THREE.MeshBasicMaterial({ color: "#ffd166", side: THREE.DoubleSide }));
       m.rotation.x = -Math.PI / 2;
       m.position.copy(W(px, py, 0.4));
       this.root.add(m);
@@ -450,7 +511,8 @@ export class World3D {
   // ---------------------------------------------------------------------------------------------------------------
   private makeDrone(kind: "s" | "e", color: THREE.Color): DroneVis {
     const g = new THREE.Group();
-    const s = kind === "e" ? 2.6 : 0.9;
+    // heavy 170 L extinguishers vs DEMO's small field-refill attackers (~15 L)
+    const s = kind === "e" ? (this.init?.mode === "demo" ? 1.15 : 2.6) : 0.9;
     const bodyMat = new THREE.MeshStandardMaterial({ color: "#2a313c", metalness: 0.5, roughness: 0.45 });
     const accent = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.6 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(1.1 * s, 0.45 * s, 1.1 * s), bodyMat);
@@ -485,11 +547,11 @@ export class World3D {
     return { group: g, rotors, beacon, target: new THREE.Vector3(), yaw: 0, targetYaw: 0, kind, isPlayer: false, seen: 0 };
   }
 
-  setDrones(rows: DroneRow[], mode: "play" | "watch", now: number): void {
+  setDrones(rows: DroneRow[], mode: "play" | "watch" | "demo", now: number): void {
     for (const [id, kind, x, y, z, yaw, , , isPlayer] of rows) {
       let d = this.drones.get(id);
       if (!d) {
-        const color = isPlayer ? COL.player : kind === "s" ? COL.seeker : mode === "watch" ? COL.swarm : COL.bot;
+        const color = isPlayer ? COL.player : kind === "s" ? COL.seeker : mode !== "play" ? COL.swarm : COL.bot;
         d = this.makeDrone(kind, color);
         d.group.position.copy(W(x, y, z));
         d.yaw = yaw;
@@ -504,6 +566,16 @@ export class World3D {
 
   dronePosition(id: string): THREE.Vector3 | null {
     return this.drones.get(id)?.group.position ?? null;
+  }
+
+  setLinks(links: [string, string][]): void {
+    this.links = links;
+  }
+
+  /** Follow a drone: the camera flies over and eases to `dist` metres from it (until the user orbits/zooms). */
+  follow(id: string | null, dist: number | null = 70): void {
+    this.followId = id;
+    this.followDist = id ? dist : null;
   }
 
   droneIds(): string[] {
@@ -559,8 +631,8 @@ export class World3D {
       this.fireCells.forEach((f, i) => {
         const fl = 0.75 + 0.25 * Math.sin(time * 9 + f.ph) + 0.1 * Math.sin(time * 23 + f.ph * 3);
         dm.position.copy(W(f.x, f.y, 0));
-        const s = 0.6 + 1.1 * f.h;
-        dm.scale.set(s, (0.8 + 2.6 * f.h) * fl, s);
+        const s = (0.6 + 1.1 * f.h) * this.flameScale;
+        dm.scale.set(s, (0.8 + 2.6 * f.h) * fl * Math.sqrt(this.flameScale), s);
         dm.rotation.set(0, f.ph, 0);
         dm.updateMatrix();
         this.fireMesh!.setMatrixAt(i, dm.matrix);
@@ -598,13 +670,54 @@ export class World3D {
       const mat = m.ring.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.55 + 0.35 * Math.sin(time * 4);
     }
+    // assignment lines: extinguisher -> its target hotspot
+    if (this.linkLines) {
+      const pos = this.linkLines.geometry.getAttribute("position") as THREE.BufferAttribute;
+      let n = 0;
+      for (const [did, hid] of this.links) {
+        if (n >= 128) break;
+        const d = this.drones.get(did);
+        const m = this.markers.get(hid);
+        if (!d || !m) continue;
+        const a = d.group.position, b = m.group.position;
+        pos.setXYZ(2 * n, a.x, a.y, a.z);
+        pos.setXYZ(2 * n + 1, b.x, 0.5, b.z);
+        n++;
+      }
+      this.linkLines.geometry.setDrawRange(0, 2 * n);
+      pos.needsUpdate = true;
+    }
+    // highlight the followed drone
+    if (this.highlight) {
+      const p = this.followId ? this.dronePosition(this.followId) : null;
+      this.highlight.visible = !!p;
+      if (p) {
+        this.highlight.position.set(p.x, 0.4, p.z);
+        const beam = this.highlight.getObjectByName("beam")!;
+        beam.scale.set(1, Math.max(p.y, 1), 1);
+        beam.position.y = Math.max(p.y, 1) / 2;
+        const glow = this.highlight.getObjectByName("glow") as THREE.Sprite;
+        glow.position.y = p.y;
+        glow.material.opacity = 0.5 + 0.4 * Math.sin(time * 5);
+        this.highlight.children[0].scale.setScalar(1 + 0.15 * Math.sin(time * 4));
+      }
+    }
     if (this.useOrbit) {
       if (this.followId) {
         const p = this.dronePosition(this.followId);
         if (p) {
-          const delta = p.clone().sub(this.orbit.target).multiplyScalar(k);
+          const kk = 1 - Math.exp(-dt * 3);
+          const delta = p.clone().sub(this.orbit.target).multiplyScalar(kk);
           this.orbit.target.add(delta);
           this.camera.position.add(delta);
+          if (this.followDist !== null) {
+            const off = this.camera.position.clone().sub(this.orbit.target);
+            const len = off.length();
+            const want = len + (this.followDist - len) * kk;
+            if (off.y < want * 0.35) off.y = want * 0.35; // stay above the drone, looking down at it
+            off.setLength(want);
+            this.camera.position.copy(this.orbit.target).add(off);
+          }
         }
       }
       this.orbit.update();

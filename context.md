@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.6` · `contract_version: 0.3.1` · last updated 2026-11-08
+`context_version: 0.3.7` · `contract_version: 0.3.1` · last updated 2026-11-09
 
 ---
 
@@ -68,7 +68,7 @@ Rule of thumb: nobody waits on anybody — `FakeDetector`, `SimAutopilot`, `SimB
 **Repo layout:**
 ```
 contracts/    shared Pydantic models, topics, interfaces, config   (this doc §11)
-core/         pure-Python swarm logic: leader, allocation, planning, map   (no ROS/web imports)
+core/         pure-Python swarm brain: priority, priority-queue allocation, zones, SwarmLeader (no ROS/web imports)
 perception/   detectors, georeferencing, mapping/tracking, evaluation; models/ (shipped .onnx), RESULTS.md
 training/     offline training: train_verifier.ipynb (the whole loop, with plots), CNN primary / GBM stretch, composite.py,
               label_tool.py, dataset adapters, FLAME3.md (citation, how labels are made, cameras/GSD)
@@ -2019,6 +2019,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-09 | sim chat (DEMO mode) | v0.3.7: swarm brain in `core/` (fire priority = confidence × projected area × heat weight; max-heap queue; refill-aware ETA allocation drone → best refill point → fire; VERIFY-hot re-queue; equal-time column × band seeker zones; idle drones pre-position at refill points) replaces `sim/brain_stub` for the swarm; sim: bigger arena (r 220 m, 20 drones), DEMO mode (r 450 m, 8 seekers + 40 field-refill attackers ~15 L foam, 6 lakes as `WaterSource` refill points vs dry basins on the same layout, 2 min, auto camera), `sim/attacker.py`, lakes in `static.py`, pause / mouse / orbit fixes in `frontend/`; `tests/core/` + `tests/sim/test_demo.py`; package `core*`; no contract changes (staging uses `Task(REFILL)` + `target_*_id`). Details: `sim/README.md` | team ask: solve the stubbed swarm brain, refills from lakes, cluster-scale demo |
 | 2026-11-08 | sim chat (integration) | v0.3.6: added `sim/` (Python game/sim server: FLAME 3 NADIR thermal maps, fire CA, thermal renderer, SimBus, SimAutopilot/SimPayload, real perception + autonomy in the loop, swarm-brain STUBS in `sim/brain_stub.py`, shadow-run scoring) and `frontend/` (three.js + TS game client, pnpm); `tests/sim/` (6 tests); `pyproject` extra `[sim]`, packages `autonomy*`/`sim*`; no contract changes. Details: `sim/README.md`, `exclude/simulator_task.md` | demo: human + bots vs autonomous swarm on the same seed |
 | 2026-11-08 | perception / ground-base integration | v0.3.6 / contracts 0.3.1: add reliable `REVIEW_REPORT` routing to `ground/reviews`, wire tracked-hotspot triage through `PerceptionReporter`, and add a deduplicating ground-base review queue | Ensure REVIEW-band candidates reach an operator queue |
 | 2026-11-08 | merge (C) | v0.3.5: merged `main` into `DoqCA/flame3-geometry` (contracts 0.3.0 cluster coordination, per-drone autonomy, CBS deconfliction, mission planning); resolved `.gitignore` (main's layout + `.env*`) and this header/changelog; no contract changes on this side | keep the perception branch current with main |

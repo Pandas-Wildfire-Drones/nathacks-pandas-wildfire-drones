@@ -1,4 +1,4 @@
-import type { DroneRow, HotspotRow, InitMsg, ScoreMsg, StateMsg, ThermalMsg } from "./types";
+import type { DemoStats, DroneRow, HotspotRow, InitMsg, ScoreMsg, StateMsg, ThermalMsg } from "./types";
 import { b64bytes } from "./types";
 
 /** Latest decoded server state, shared by HUD, plan screen and score screen. */
@@ -20,6 +20,11 @@ export const store = {
   plan: [] as [string, string][],
   score: null as ScoreMsg | null,
   groundBytes: null as Uint8Array | null,
+  acts: {} as Record<string, string>,
+  links: [] as [string, string][],
+  demo: null as DemoStats | null,
+  queue: [] as [string, number, number][],
+  followId: null as string | null,
 };
 
 export function absorb(s: StateMsg): { fireChanged: boolean; burnt: Uint8Array | null } {
@@ -46,6 +51,10 @@ export function absorb(s: StateMsg): { fireChanged: boolean; burnt: Uint8Array |
   if (s.water_dropped !== undefined) store.water = s.water_dropped;
   if (s.plan) store.plan = s.plan;
   if (s.score) store.score = s.score;
+  if (s.acts) store.acts = s.acts;
+  if (s.links) store.links = s.links;
+  if (s.demo) store.demo = s.demo;
+  if (s.queue) store.queue = s.queue;
   return { fireChanged, burnt };
 }
 
@@ -64,4 +73,9 @@ export function resetStore(init: InitMsg): void {
   store.plan = [];
   store.score = null;
   store.groundBytes = b64bytes(init.ground.data);
+  store.acts = {};
+  store.links = [];
+  store.demo = null;
+  store.queue = [];
+  store.followId = null;
 }

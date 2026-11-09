@@ -4,6 +4,8 @@ import * as THREE from "three";
  * Client-side flight model for the player's drone (sent to the server as a pose at 20 Hz).
  * Deliberately crude (the project leaves real navigation to PX4): WASD in the body frame, R/F altitude with hard
  * min/max limits, Q/E or mouse to yaw, Shift to boost. Speeds/accel come from the contracts PlatformSpec.
+ * Mouse: with pointer lock (click the view) any movement turns; without it (the browser refuses re-locking for
+ * ~1 s after Esc, or the user declined) dragging with the left button turns the same way.
  */
 export interface FlightLimits {
   minZ: number;
@@ -30,6 +32,7 @@ export class Player {
   private keys = new Set<string>();
   private mouseDx = 0;
   private mouseDy = 0;
+  private dragging = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     window.addEventListener("keydown", (e) => {
@@ -40,16 +43,31 @@ export class Player {
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => this.keys.clear());
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button === 0) this.dragging = true;
+    });
+    window.addEventListener("mouseup", () => (this.dragging = false));
     document.addEventListener("mousemove", (e) => {
-      if (document.pointerLockElement === this.canvas) {
+      if (this.mouseLocked || (this.enabled && this.dragging)) {
         this.mouseDx += e.movementX;
         this.mouseDy += e.movementY;
       }
     });
   }
 
+  get mouseLocked(): boolean {
+    return document.pointerLockElement === this.canvas;
+  }
+
   lock(): void {
-    if (document.pointerLockElement !== this.canvas) this.canvas.requestPointerLock?.();
+    if (this.mouseLocked) return;
+    try {
+      // returns a Promise in current browsers; it rejects if not triggered by a gesture or right after an unlock
+      const r = this.canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+      r?.catch?.(() => {});
+    } catch {
+      /* drag-to-turn still works */
+    }
   }
 
   spawn(x: number, y: number, z: number, yaw: number, limits: FlightLimits, pitch: number): void {

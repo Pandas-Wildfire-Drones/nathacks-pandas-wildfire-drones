@@ -1,7 +1,10 @@
 // Messages from the Python sim server (sim/game.py). World coords: ENU metres (x east, y north, z up).
 
-export type Phase = "BRIEFING" | "SEEK" | "PLAN" | "EXTINGUISH" | "SCORE";
-export type Mode = "play" | "watch";
+export type Phase = "BRIEFING" | "SEEK" | "PLAN" | "EXTINGUISH" | "DEMO" | "SCORE";
+export type Mode = "play" | "watch" | "demo";
+
+// [id, wet, nominal radius m, outline [[x, y], ...]]
+export type LakeRow = [string, boolean, number, [number, number][]];
 
 export interface InitMsg {
   type: "init";
@@ -26,12 +29,17 @@ export interface InitMsg {
   water_capacity: number;
   bots: string[];
   player_ext: string | null;
+  lakes: LakeRow[];
+  n_seekers: number;
+  n_exts: number;
+  zones: Record<string, [number, number][]>;
+  status_text: Record<string, string>;
 }
 
 // [id, kind ("s"|"e"), x, y, z, yaw, water, status, isPlayer]
 export type DroneRow = [string, "s" | "e", number, number, number, number, number, string, boolean];
-// [id, x, y, area_m2, confidence, status(0 det,1 conf,2 assigned,3 suppressed,4 fp), litres still needed]
-export type HotspotRow = [string, number, number, number, number, number, number];
+// [id, x, y, area_m2, confidence, status(0 det,1 conf,2 assigned,3 suppressed,4 fp), litres still needed, priority 0..1]
+export type HotspotRow = [string, number, number, number, number, number, number, number];
 
 export interface ThermalMsg {
   w: number;
@@ -42,6 +50,33 @@ export interface ThermalMsg {
   t: number;
   boxes: [number, number, number][];
   tmax: number;
+  id?: string;
+}
+
+export interface DemoStats {
+  fire_fought_pct: number;
+  fire_left_pct: number;
+  fire_m2: number;
+  baseline_m2: number;
+  drops: number;
+  fills_lake: number;
+  fills_base: number;
+  suppressed: number;
+  verify_hot: number;
+  reopened: number;
+  confirmed: number;
+  queue: number;
+  tasks: number;
+  water_dropped_l: number;
+  water_on_fire_l: number;
+  seekers: number;
+  attackers: number;
+  lakes: number;
+  coverage_pct?: number;
+  fires_detected?: number;
+  decoys_reported?: number;
+  fires_total?: number;
+  wet?: boolean;
 }
 
 export interface ScoreSide {
@@ -61,6 +96,7 @@ export interface ScoreMsg {
   decoys_total: number;
   human?: ScoreSide;
   swarm?: ScoreSide;
+  demo?: DemoStats;
 }
 
 export interface StateMsg {
@@ -85,6 +121,10 @@ export interface StateMsg {
   water_dropped?: number;
   plan?: [string, string][];
   score?: ScoreMsg;
+  acts?: Record<string, string>;
+  links?: [string, string][]; // [drone id, hotspot id] active assignments
+  demo?: DemoStats;
+  queue?: [string, number, number][]; // top of the priority queue: [hotspot id, priority, litres unassigned]
 }
 
 export type ServerMsg = InitMsg | StateMsg | { type: "loading"; map: string } | { type: "error"; message: string };

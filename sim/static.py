@@ -6,7 +6,7 @@ Coordinates: ENU metres, origin = arena centre. Rasters are indexed [row, col] w
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy import ndimage
@@ -14,7 +14,7 @@ from scipy import ndimage
 from sim.config import GameConfig
 from sim.maps import MapData, load_map
 
-__all__ = ["FireSeed", "DecoySeed", "Tree", "WorldStatic", "build_static"]
+__all__ = ["FireSeed", "DecoySeed", "Tree", "LakeSeed", "WorldStatic", "build_static"]
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,37 @@ class Tree:
     kind: int  # 0 conifer, 1 broadleaf
 
 
+@dataclass(frozen=True)
+class LakeSeed:
+    """A lake (refill point) or, on the dry variant of the same map, a dry basin. Shape: a wobbly circle."""
+
+    lake_id: str
+    x: float
+    y: float
+    r: float
+    harm: tuple[tuple[float, float], ...]   # (relative amplitude, phase) of harmonics k = 2, 3, 4
+    wet: bool
+
+    @property
+    def max_r(self) -> float:
+        return self.r * (1.0 + sum(abs(a) for a, _ in self.harm))
+
+    def radius_at(self, theta):
+        out = 1.0
+        for k, (a, ph) in enumerate(self.harm, start=2):
+            out = out + a * np.cos(k * theta + ph)
+        return self.r * out
+
+    def contains(self, x, y, buffer_m: float = 0.0):
+        dx, dy = np.asarray(x) - self.x, np.asarray(y) - self.y
+        return np.hypot(dx, dy) < self.radius_at(np.arctan2(dy, dx)) + buffer_m
+
+    def outline(self, n: int = 56) -> list[tuple[float, float]]:
+        th = np.linspace(0, 2 * math.pi, n, endpoint=False)
+        r = self.radius_at(th)
+        return [(float(self.x + rr * math.cos(t)), float(self.y + rr * math.sin(t))) for t, rr in zip(th, r, strict=True)]
+
+
 @dataclass
 class WorldStatic:
     cfg: GameConfig
@@ -68,6 +99,10 @@ class WorldStatic:
     trees: list[Tree]
     fuel: np.ndarray      # fire-grid fuel load 0..1
     init_mask: list[tuple[np.ndarray, np.ndarray, np.ndarray]]  # per fire: (rows, cols, burning fraction) on the fire grid
+    lakes: list[LakeSeed] = field(default_factory=list)
+
+    def in_lake(self, x: float, y: float, buffer_m: float = 0.0) -> bool:
+        return any(bool(lk.contains(x, y, buffer_m)) for lk in self.lakes)
 
     @property
     def radius(self) -> float:
@@ -111,7 +146,7 @@ def _mosaic(tiles: list[np.ndarray], n: int, rng: np.random.Generator, normalize
 
 
 def _place_points(rng, n, R, min_r_from_base, base, min_sep, existing, max_r, clusters=None, cluster_frac=0.0,
-                  cluster_r=28.0):
+                  cluster_r=28.0, forbid=None):
     pts = []
     tries = 0
     while len(pts) < n and tries < 20000:
@@ -126,6 +161,8 @@ def _place_points(rng, n, R, min_r_from_base, base, min_sep, existing, max_r, cl
         if math.hypot(x, y) > max_r or math.hypot(x - base[0], y - base[1]) < min_r_from_base:
             continue
         if any(math.hypot(x - px, y - py) < min_sep for px, py in pts + existing):
+            continue
+        if forbid is not None and forbid(x, y):
             continue
         pts.append((x, y))
     return pts
@@ -151,16 +188,27 @@ def build_static(cfg: GameConfig, map_id: str, seed: int) -> WorldStatic:
     char = _mosaic([t.char for t in md.tiles], n, rng, normalize=False)
     fire_tex = _mosaic([t.fire for t in md.tiles], n, rng, normalize=False)
     char = np.maximum(char, bg + 3.0)
+    base = cfg.base_xy
+
+    # ---- lakes (own random stream, so the wet and dry variants of a map share one layout) ----------------------
+    lakes: list[LakeSeed] = []
+    if cfg.n_lakes > 0:
+        lrng = np.random.default_rng([seed, 7])
+        rmax = cfg.lake_r_m[1] * 1.3
+        for i, (x, y) in enumerate(_place_points(lrng, cfg.n_lakes, R, rmax + 70.0, base, 2 * rmax + 40.0, [],
+                                                 R - rmax - 25.0)):
+            harm = tuple((float(lrng.uniform(0.03, 0.10)), float(lrng.uniform(0, 2 * math.pi))) for _ in range(3))
+            lakes.append(LakeSeed(f"L{i + 1}", x, y, float(lrng.uniform(*cfg.lake_r_m)), harm, cfg.lakes_wet))
+    in_lake = (lambda x, y, b=8.0: any(bool(lk.contains(x, y, b)) for lk in lakes)) if lakes else None
 
     # ---- fire seeds -----------------------------------------------------------------------------------------
-    base = cfg.base_xy
-    n_clusters = 3
-    clusters = _place_points(rng, n_clusters, R, 70.0, base, 60.0, [], R - 45.0)
+    clusters = _place_points(rng, cfg.fire_clusters, R, 70.0, base, 60.0, [], R - 45.0, forbid=in_lake)
     fires: list[FireSeed] = []
     taken: list[tuple[float, float]] = []
     k = 0
     for ft in cfg.fires:
-        pts = _place_points(rng, ft.count, R, 40.0, base, 11.0, taken, R - 18.0, clusters, 0.55)
+        pts = _place_points(rng, ft.count, R, 40.0, base, 11.0, taken, R - 18.0, clusters, 0.55,
+                            cluster_r=cfg.cluster_r_m, forbid=in_lake)
         for x, y in pts:
             area = float(rng.uniform(*ft.area_m2))
             ratio = md.tarea / area
@@ -210,7 +258,7 @@ def build_static(cfg: GameConfig, map_id: str, seed: int) -> WorldStatic:
     decoys: list[DecoySeed] = []
     j = 0
     for dt in cfg.decoys:
-        pts = _place_points(rng, dt.count, R, 35.0, base, 16.0, taken, R - 20.0)
+        pts = _place_points(rng, dt.count, R, 35.0, base, 16.0, taken, R - 20.0, forbid=in_lake)
         for x, y in pts:
             decoys.append(DecoySeed(f"D{j + 1}", dt.name, x, y, float(rng.uniform(*dt.temp_c)),
                                     float(rng.uniform(*dt.area_m2)), float(rng.uniform(0, 360))))
@@ -261,6 +309,8 @@ def build_static(cfg: GameConfig, map_id: str, seed: int) -> WorldStatic:
             continue
         if any(math.hypot(x - px, y - py) < 7.0 for px, py in taken):
             continue
+        if in_lake is not None and in_lake(x, y, 3.0):
+            continue
         kind = 0 if rng.random() < 0.78 else 1
         h = float(rng.uniform(9, 24) if kind == 0 else rng.uniform(7, 15))
         trees.append(Tree(x, y, h, float(h * rng.uniform(0.2, 0.28)), kind))
@@ -269,4 +319,30 @@ def build_static(cfg: GameConfig, map_id: str, seed: int) -> WorldStatic:
     yy, xx = (np.mgrid[:nf, :nf] + 0.5) * cell - R
     fuel = np.clip(fuel, 0.35, 1.0).astype(np.float32)
     fuel[np.hypot(xx, yy) > R - 2] = 0.0
-    return WorldStatic(cfg, md, seed, res, n, bg, char, fire_tex, fires, decoys, trees, fuel, init_masks)
+    if lakes:
+        _paint_lakes(lakes, bg, char, fire_tex, fuel, R, res, cell, rng)
+    return WorldStatic(cfg, md, seed, res, n, bg, char, fire_tex, fires, decoys, trees, fuel, init_masks, lakes)
+
+
+def _paint_lakes(lakes, bg, char, fire_tex, fuel, R, res, cell, rng) -> None:
+    """Lakes: no fuel; thermally a smooth surface a little WARMER than the land at night ([VERIFY], context.md 8).
+    Dry basins: no fuel, bare mud slightly cooler than the forest floor, little texture."""
+    ref = float(np.median(bg))
+    for lk in lakes:
+        m = lk.max_r + 2.0
+        r0, r1 = max(int((lk.y - m + R) / res), 0), min(int((lk.y + m + R) / res) + 1, bg.shape[0])
+        c0, c1 = max(int((lk.x - m + R) / res), 0), min(int((lk.x + m + R) / res) + 1, bg.shape[1])
+        yy, xx = (np.mgrid[r0:r1, c0:c1] + 0.5) * res - R
+        inside = lk.contains(xx, yy)
+        edge = ndimage.gaussian_filter(inside.astype(np.float32), 1.5 / res)   # soft shoreline
+        sl = (slice(r0, r1), slice(c0, c1))
+        if lk.wet:
+            surf = ref + 2.5 + 0.25 * ndimage.gaussian_filter(rng.normal(size=inside.shape), 4.0 / res) * 8
+        else:
+            surf = 0.3 * bg[sl] + 0.7 * (ref - 1.0)
+        for a in (bg, char, fire_tex):
+            a[sl] = a[sl] * (1 - edge) + surf * edge
+        f0, f1 = max(int((lk.y - m + R) / cell), 0), min(int((lk.y + m + R) / cell) + 1, fuel.shape[0])
+        g0, g1 = max(int((lk.x - m + R) / cell), 0), min(int((lk.x + m + R) / cell) + 1, fuel.shape[1])
+        fy, fx = (np.mgrid[f0:f1, g0:g1] + 0.5) * cell - R
+        fuel[f0:f1, g0:g1][lk.contains(fx, fy, 1.0)] = 0.0

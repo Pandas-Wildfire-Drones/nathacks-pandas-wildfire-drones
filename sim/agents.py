@@ -15,6 +15,7 @@ from concurrent.futures import Executor, Future
 from dataclasses import dataclass, field
 
 import numpy as np
+from scipy import ndimage
 
 from autonomy.drone_controller import DroneController
 from autonomy.mission_coordinator import MissionPlanningContext
@@ -31,7 +32,7 @@ from perception.pipeline import SeekerPerception
 from sim import thermal
 from sim.vehicles import SimAutopilot, SimPayload
 
-__all__ = ["SeekerAgent", "ExtinguisherAgent", "PlayerExtinguisher", "planning_context"]
+__all__ = ["SeekerAgent", "ExtinguisherAgent", "PlayerExtinguisher", "VerifyPass", "planning_context"]
 
 _SENSORS_OK = {"thermal": True, "lidar": True, "gnss_rtk": True, "rangefinder": True, "comms": True,
                "compute": True, "payload": True, "power": True}
@@ -77,6 +78,7 @@ class SeekerAgent:
         self.frame_i = 0
         self.last_preview: dict | None = None
         self.n_frames = 0
+        self.passes = 0
         spec = world.cfg.seeker_spec
         self.camera = spec.thermal.camera
         self.saturation_c = spec.thermal.saturation_temp_c
@@ -105,6 +107,10 @@ class SeekerAgent:
         if not self.player:
             if self.searching and self.waypoints and self.ap.at_target(2.0):
                 self.wp_i += 1
+                if self.wp_i >= len(self.waypoints) and cfg.loop_search:
+                    self.waypoints = self.waypoints[::-1]   # re-fly the zone: re-observation -> growth estimates
+                    self.wp_i = 1
+                    self.passes += 1
                 if self.wp_i < len(self.waypoints):
                     self.ap.goto(self.waypoints[self.wp_i], cfg.lawnmower_speed_mps)
                 else:
@@ -207,12 +213,7 @@ class ExtinguisherAgent:
         self.controllers_used = 1
         # VERIFY after each drop with the extinguisher's own nadir thermal (aim/verify camera, context.md 6.3).
         # A centre crop of the 320x256 / 50 deg camera keeps the same GSD at a fraction of the render cost.
-        full = spec.thermal.camera
-        crop = 192
-        hfov = math.degrees(2 * math.atan(math.tan(math.radians(full.hfov_deg) / 2) * crop / full.width_px))
-        self.verify_camera = CameraModel(width_px=crop, height_px=crop, hfov_deg=hfov)
-        self.verify: dict | None = None
-        self.verify_seq = 0
+        self.verify = VerifyPass(drone_id, world, spec)
 
     def _sync(self, now: float) -> None:
         s, ap = self.state_obj, self.ap
@@ -225,50 +226,11 @@ class ExtinguisherAgent:
         s.endurance_remaining_s = ap.endurance_remaining_s()
         task = self.adapter.state.current_task
         s.current_task_id = (task.task_id if task is not None
-                             else f"VERIFY-{self.verify['hotspot'].hotspot_id}" if self.verify is not None else None)
+                             else f"VERIFY-{self.verify.hotspot.hotspot_id}" if self.verify.active else None)
         s.status = (DroneStatus.REFILLING if self.adapter.state.refill_request_outstanding
                     else DroneStatus.EXTINGUISHING if task is not None
                     else _status_for(ap.speed_mps(), DroneStatus.TRANSIT))
         s.timestamp = now
-
-    def _verify_step(self, now: float) -> None:
-        v = self.verify
-        if now < v["next_t"]:
-            return
-        v["next_t"] = now + 0.5
-        p = self.ap.position()
-        pose = Pose(position=p, yaw_deg=self.ap.heading_deg())
-        self.verify_seq += 1
-        job = thermal.prepare(self.world.static, self.world.fire, pose, self.verify_camera,
-                              noise_seed=zlib.crc32(f"{self.id}:v{self.verify_seq}".encode()),
-                              netd_c=self.spec.thermal.netd_mk / 1000.0, saturation_c=self.spec.thermal.saturation_temp_c)
-        temp = thermal.render(self.world.static, job, self.world.cfg.fire_cell_m)
-        frame = ThermalFrame(drone_id=self.id, timestamp=now, temp_c=temp, pose=pose, camera=self.verify_camera)
-        gsd = self.verify_camera.ground_sample_distance_m(max(p.z, 1.0))
-        h = v["hotspot"]
-        v["checker"].add_frame(frame, h.position, gsd)
-        v["last"] = (temp, gsd, p)
-        if len(v["checker"]._hot) < v["checker"].min_frames and now < v["deadline"]:
-            return
-        res = v["checker"].result()
-        temp, gsd, p = v["last"]
-        hot = temp >= float(np.median(temp)) + v["checker"].hot_margin_c
-        area = float(hot.sum()) * gsd * gsd
-        if res.status is HotspotStatus.SUPPRESSED and area < 1.0:
-            report = h.model_copy(update={"status": HotspotStatus.SUPPRESSED, "est_area_m2": 0.0,
-                                          "last_seen": now, "reported_by": self.id})
-        else:   # still hot (here or at the fire's edge): re-aim at the remaining heat
-            vv, uu = np.nonzero(hot)
-            pos = h.position
-            if len(uu):
-                xs, ys = thermal.ground_coords(pose, self.verify_camera, us=[float(np.mean(uu))],
-                                               vs=[float(np.mean(vv))])
-                pos = Position(x=float(xs[0, 0]), y=float(ys[0, 0]), z=0.0)
-            report = h.model_copy(update={"status": HotspotStatus.CONFIRMED, "position": pos,
-                                          "est_area_m2": max(area, 0.5), "assigned_to": None,
-                                          "last_seen": now, "reported_by": self.id})
-        self.pub.publish(HotspotReport(hotspot=report))
-        self.verify = None
 
     def tick(self, now: float, dt: float) -> None:
         self.ap.update(dt)
@@ -278,10 +240,11 @@ class ExtinguisherAgent:
         if result is not None:
             self.last_status = result.status
             if result.status == "DONE" and result.water_used_l > 0 and target_before is not None:
-                self.verify = {"hotspot": target_before, "checker": SuppressionChecker(radius_m=3.0),
-                               "next_t": now + 0.6, "deadline": now + 5.0}
-        if self.verify is not None:
-            self._verify_step(now)
+                self.verify.start(target_before, now)
+        if self.verify.active:
+            report = self.verify.step(now, self.ap)
+            if report is not None:
+                self.pub.publish(HotspotReport(hotspot=report))
         # DroneController is single-use (its terminal result never clears): give the adapter a fresh one
         ctl = self.adapter.controller
         if self.adapter.state.current_task is None and not ctl.ready_for_mission:
@@ -291,6 +254,74 @@ class ExtinguisherAgent:
         if now >= self.next_hb_t:
             self.next_hb_t = now + 0.5
             self.pub.publish(Heartbeat(state=self.state_obj.model_copy()))
+
+
+class VerifyPass:
+    """VERIFY after a drop with the extinguisher's own nadir thermal (aim/verify camera, context.md 6.3) and the real
+    perception.confirm.SuppressionChecker. Returns the HotspotReport body to publish (SUPPRESSED, or CONFIRMED
+    re-aimed at the remaining heat). A centre crop of the 320x256 / 50 deg camera keeps the same GSD at a fraction
+    of the render cost."""
+
+    def __init__(self, drone_id: str, world, spec, crop: int = 192, first_frame_s: float = 0.6,
+                 timeout_s: float = 5.0):
+        self.id, self.world, self.spec = drone_id, world, spec
+        full = spec.thermal.camera
+        hfov = math.degrees(2 * math.atan(math.tan(math.radians(full.hfov_deg) / 2) * crop / full.width_px))
+        self.camera = CameraModel(width_px=crop, height_px=crop, hfov_deg=hfov)
+        self.first_frame_s, self.timeout_s = first_frame_s, timeout_s
+        self.hotspot = None
+        self.checker: SuppressionChecker | None = None
+        self.next_t = self.deadline = 0.0
+        self.last = None
+        self.seq = 0
+
+    @property
+    def active(self) -> bool:
+        return self.hotspot is not None
+
+    def start(self, hotspot, now: float) -> None:
+        self.hotspot = hotspot
+        self.checker = SuppressionChecker(radius_m=3.0)
+        self.next_t, self.deadline = now + self.first_frame_s, now + self.timeout_s
+
+    def step(self, now: float, ap):
+        if now < self.next_t:
+            return None
+        self.next_t = now + 0.5
+        p = ap.position()
+        pose = Pose(position=p, yaw_deg=ap.heading_deg())
+        self.seq += 1
+        job = thermal.prepare(self.world.static, self.world.fire, pose, self.camera,
+                              noise_seed=zlib.crc32(f"{self.id}:v{self.seq}".encode()),
+                              netd_c=self.spec.thermal.netd_mk / 1000.0,
+                              saturation_c=self.spec.thermal.saturation_temp_c)
+        temp = thermal.render(self.world.static, job, self.world.cfg.fire_cell_m)
+        frame = ThermalFrame(drone_id=self.id, timestamp=now, temp_c=temp, pose=pose, camera=self.camera)
+        gsd = self.camera.ground_sample_distance_m(max(p.z, 1.0))
+        h, chk = self.hotspot, self.checker
+        chk.add_frame(frame, h.position, gsd)
+        self.last = (temp, gsd, pose)
+        if len(chk._hot) < chk.min_frames and now < self.deadline:
+            return None
+        res = chk.result()
+        temp, gsd, pose = self.last
+        hot = temp >= float(np.median(temp)) + chk.hot_margin_c
+        area = float(hot.sum()) * gsd * gsd
+        if res.status is HotspotStatus.SUPPRESSED and area < 1.0:
+            report = h.model_copy(update={"status": HotspotStatus.SUPPRESSED, "est_area_m2": 0.0,
+                                          "last_seen": now, "reported_by": self.id})
+        else:   # still hot (here or at the fire's edge): re-aim at the densest remaining heat (patchy fires:
+            pos = h.position     # the centroid can fall between patches)
+            if hot.any():
+                dens = ndimage.gaussian_filter(hot.astype(np.float32), max(1.0, 1.0 / max(gsd, 1e-3)))
+                vv, uu = np.unravel_index(int(np.argmax(dens)), dens.shape)
+                xs, ys = thermal.ground_coords(pose, self.camera, us=[float(uu)], vs=[float(vv)])
+                pos = Position(x=float(xs[0, 0]), y=float(ys[0, 0]), z=0.0)
+            report = h.model_copy(update={"status": HotspotStatus.CONFIRMED, "position": pos,
+                                          "est_area_m2": max(area, 0.5), "assigned_to": None,
+                                          "last_seen": now, "reported_by": self.id})
+        self.hotspot = None
+        return report
 
 
 @dataclass

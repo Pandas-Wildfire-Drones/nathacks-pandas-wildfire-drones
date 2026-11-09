@@ -152,8 +152,11 @@ class FireModel:
             np.maximum(wet, 0.0, out=wet)
 
     # ------------------------------------------------------------------------------------------------------------
-    def apply_water(self, x: float, y: float, litres: float, agl_m: float) -> float:
-        """Drop `litres` centred at (x, y). Returns litres that landed on burning cells."""
+    def apply_water(self, x: float, y: float, litres: float, agl_m: float, effect: float = 1.0) -> float:
+        """Drop `litres` centred at (x, y). Returns litres that landed on burning cells.
+
+        `effect` = litres of plain water one litre of the agent replaces (AgentSpec.water_equiv_multiplier, e.g.
+        Class A foam 3x [ASSUMPTION]): it scales the knock-down and the wetting, not the footprint."""
         cfg = self.cfg
         if litres <= 0:
             return 0.0
@@ -179,10 +182,10 @@ class FireModel:
         sl = (slice(a0, a1), slice(b0, b1))
         heat = self.heat[sl]
         on_fire = float((lpm2 * (heat > 0)).sum() * cell * cell)
-        knock = lpm2 / (cfg.suppression_l_per_m2 * self.wmult[sl])
+        knock = lpm2 * effect / (cfg.suppression_l_per_m2 * self.wmult[sl])
         heat -= knock
         np.maximum(heat, 0.0, out=heat)
-        self.wet[sl] += lpm2
+        self.wet[sl] += lpm2 * effect
         self.water_on_fire_l += on_fire
         return on_fire
 

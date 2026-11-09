@@ -98,8 +98,30 @@ def _synthetic(world_res_m: float, seed: int = 7) -> MapData:
 _CACHE: dict[str, MapData] = {}
 
 
+def _resample(md: MapData, res: float) -> MapData:
+    """Same map at another world resolution (DEMO maps use a coarser raster to keep large arenas in memory)."""
+    k = md.world_res_m / res
+    z = lambda a, order=1: ndimage.zoom(a.astype(np.float32), k, order=order)  # noqa: E731
+    tiles = [Tile(z(t.bg), z(t.char), z(t.fire)) for t in md.tiles]
+    tmask = np.stack([ndimage.zoom(m.astype(np.float32), k, order=1) >= 0.5 for m in md.tmask]).astype(np.uint8)
+    ttemp = np.stack([z(t) for t in md.ttemp]).astype(np.float16)
+    return MapData(md.map_id, md.title, res, tiles, tmask, ttemp, md.tarea.copy(), dict(md.meta, resampled_from=
+                   md.world_res_m), md.real)
+
+
 def load_map(map_id: str, world_res_m: float = 0.15) -> MapData:
     """Load (and on first use, build) a map. Falls back to `synth` if the FLAME 3 data isn't on this machine."""
+    key = f"{map_id}@{world_res_m:g}"
+    if key in _CACHE:
+        return _CACHE[key]
+    md = _load_native(map_id, world_res_m)
+    if abs(md.world_res_m - world_res_m) > 1e-6:
+        md = _resample(md, world_res_m)
+    _CACHE[key] = md
+    return md
+
+
+def _load_native(map_id: str, world_res_m: float) -> MapData:
     if map_id in _CACHE:
         return _CACHE[map_id]
     if map_id == "synth":
@@ -114,7 +136,7 @@ def load_map(map_id: str, world_res_m: float = 0.15) -> MapData:
                 _CACHE[map_id] = md
                 return md
             from sim.maps.build import build_map
-            build_map(map_id, data, default_maps_dir(create=True), world_res_m)
+            build_map(map_id, data, default_maps_dir(create=True), 0.15)   # native FLAME 3 NADIR res
         md = _load_npz(path)
     _CACHE[map_id] = md
     return md

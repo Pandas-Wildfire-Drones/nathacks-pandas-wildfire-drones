@@ -1,6 +1,8 @@
-"""SWARM-BRAIN STUBS (workstream A replaces these). Everything here is deliberately dumb but uses the real contracts.
+"""Legacy swarm-brain stubs. The autonomous swarm (watch / DEMO / play's shadow run) now uses the real brain in
+`core/` (core.leader.SwarmLeader, core.allocation, core.zones, core.priority). What is left here only backs the
+human-mode bot commander (sim/bots.HumanCommander subclasses StubLeader) and its nearest-station refill choice.
 
-Three seams, each a Protocol so the real `swarm/` code can drop in:
+Three seams, each a Protocol:
   ZoneAllocator   arena + seekers -> one search Zone per seeker            stub: equal horizontal bands
   TaskAssigner    hotspots + idle extinguishers -> (drone, hotspot, litres) stub: greedy nearest, no look-ahead
   RefillAssigner  RefillRequest -> station                                 stub: nearest station

@@ -1,7 +1,9 @@
 """One simulated world: static map + fire + bus + drones + leader. A session runs up to three of them in lockstep:
 
-  human     player seeker + player extinguisher + 9 bot extinguishers (HumanCommander)
-  swarm     N lawnmower seekers + 10 extinguishers (StubLeader with the stub swarm-brain)
+  human     player seeker + player extinguisher + 18 bot extinguishers (HumanCommander)
+  swarm     N lawnmower seekers + 19 heavy extinguishers (core.leader.SwarmLeader, autonomy adapter + CBS)
+  demo      DEMO mode: seekers + field-refill attackers flying at the same time, lakes as refill points
+            (core.leader.SwarmLeader, sim.attacker.AttackerAgent)
   baseline  fire only (no drones): the denominator of "% fire left"
 """
 from __future__ import annotations
@@ -14,12 +16,17 @@ import numpy as np
 
 from autonomy.water_drop import WaterDropLimits
 from contracts import (
-    SUB_GROUND_ALERTS, ExtinguishingAgent, GridSpec, Position, RefillStation,
+    SUB_GROUND_ALERTS, ExtinguishingAgent, GridSpec, Position, RefillStation, RefillTargetKind, WaterSource,
+    WaterSourceKind, WaterSourceOrigin, WaterSourceStatus,
 )
+from core.allocation import RefillPoint
+from core.leader import LeaderConfig, SwarmLeader
+from core.zones import EqualTimeZoneAllocator
 from perception.detectors import FusedDetector, load_classifier
 from perception.pipeline import SeekerPerception
 from sim.agents import ExtinguisherAgent, PlayerExtinguisher, SeekerAgent, planning_context
-from sim.brain_stub import DummyRefillAssigner, DummyTaskAssigner, DummyZoneAllocator, StubLeader
+from sim.attacker import AttackerAgent
+from sim.brain_stub import DummyRefillAssigner
 from sim.bots import HumanCommander
 from sim.bus import SimBus, SimClock
 from sim.config import GameConfig
@@ -32,8 +39,7 @@ __all__ = ["World", "MODEL_PATH"]
 MODEL_PATH = "perception/models/fire_cnn_mix.onnx"   # perception RESULTS.md: recommended model (mix_v2)
 
 
-def _pads(base: Position, n: int, spacing: float = 7.0) -> list[Position]:
-    cols = 5
+def _pads(base: Position, n: int, spacing: float = 7.0, cols: int = 5) -> list[Position]:
     out = []
     for i in range(n):
         r, c = divmod(i, cols)
@@ -52,7 +58,9 @@ class World:
         self.seekers: list[SeekerAgent] = []
         self.exts: list[ExtinguisherAgent] = []
         self.player_ext: PlayerExtinguisher | None = None
-        self.leader: StubLeader | None = None
+        self.leader = None
+        self.attackers: list[AttackerAgent] = []
+        self.zones: dict = {}
         self.drops: deque = deque(maxlen=64)
         self.drop_seq = 0
         self.log: deque = deque(maxlen=40)
@@ -62,7 +70,16 @@ class World:
         self.station = RefillStation(station_id="S1", position=Position(x=base.x, y=base.y - 8.0, z=0.0),
                                      water_available_l=1e6, fill_rate_lpm=600.0, total_bays=10, free_bays=10,
                                      fuel_available_kg=5000.0, agents_available=[ExtinguishingAgent.WATER])
+        self.water_sources: list[WaterSource] = [
+            WaterSource(source_id=lk.lake_id, position=Position(x=lk.x, y=lk.y, z=0.0), kind=WaterSourceKind.LAKE,
+                        origin=WaterSourceOrigin.PRIOR_MAP, status=WaterSourceStatus.VALIDATED,
+                        surface_area_m2=math.pi * lk.r ** 2, est_volume_l=math.pi * lk.r ** 2 * 2000.0,
+                        approach_clearance_m=lk.r, confidence=0.95)
+            for lk in static.lakes if lk.wet]
         if kind == "baseline":
+            return
+        if kind == "demo":
+            self._build_demo(executor, model_path)
             return
 
         R = cfg.arena_radius_m
@@ -104,15 +121,66 @@ class World:
             self.exts.append(agent)
             autopilots[eid] = ap
 
-        common = dict(refill=DummyRefillAssigner(), stations=[self.station],
-                      confirm_threshold=self.confirm_threshold, l_per_m2=cfg.suppression_l_per_m2,
-                      margin=cfg.hotspot_volume_margin, min_volume_l=cfg.min_task_volume_l,
-                      geofence_radius_m=cfg.arena_radius_m - 4.0, log=self.log.append)
         if kind == "human":
-            self.leader = HumanCommander("commander", self.bus, self.clock, autopilots=autopilots,
-                                         transit_z=cfg.transit_agl_m, **common)
+            self.leader = HumanCommander(
+                "commander", self.bus, self.clock, autopilots=autopilots, transit_z=cfg.transit_agl_m,
+                refill=DummyRefillAssigner(), stations=[self.station], confirm_threshold=self.confirm_threshold,
+                l_per_m2=cfg.suppression_l_per_m2, margin=cfg.hotspot_volume_margin,
+                min_volume_l=cfg.min_task_volume_l, geofence_radius_m=cfg.arena_radius_m - 4.0, log=self.log.append)
         else:
-            self.leader = StubLeader("leader", self.bus, self.clock, assigner=DummyTaskAssigner(), **common)
+            self.leader = SwarmLeader("leader", self.bus, self.clock, self._leader_cfg(), self.refill_points(),
+                                      log=self.log.append)
+        self.bus.subscribe(SUB_GROUND_ALERTS, self._on_alert)
+
+    # ------------------------------------------------------------------------------------------------------------
+    def _leader_cfg(self) -> LeaderConfig:
+        cfg, espec = self.cfg, self.cfg.extinguisher_spec
+        return LeaderConfig(
+            confirm_threshold=self.confirm_threshold, capacity_l=espec.water_capacity_l,
+            speed_mps=espec.cruise_speed_mps, l_per_m2=cfg.suppression_l_per_m2, agent_mult=cfg.agent_mult,
+            margin=cfg.hotspot_volume_margin, min_volume_l=cfg.min_task_volume_l,
+            min_useful_l=min(20.0, 0.9 * espec.water_capacity_l), max_per_fire=cfg.max_per_fire,
+            geofence_radius_m=cfg.arena_radius_m - 4.0, prefill_idle=cfg.prefill_idle, stage_idle=cfg.stage_idle,
+            fire_time_scale=cfg.fire_time_scale, verify_timeout_s=8.0 if not cfg.demo else 4.0)
+
+    def refill_points(self) -> list[RefillPoint]:
+        fill_s = self.cfg.attacker_fill_s if self.cfg.demo else self.cfg.refill_dwell_s
+        pts = [RefillPoint(self.station.station_id, RefillTargetKind.STATION, self.station.position, fill_s)]
+        if self.cfg.use_water_sources:
+            pts += [RefillPoint(w.source_id, RefillTargetKind.WATER_SOURCE, w.position, fill_s)
+                    for w in self.water_sources]
+        return pts
+
+    def _build_demo(self, executor, model_path: str) -> None:
+        """DEMO: seekers and field-refill attackers at the same time; lakes (when wet) are refill points."""
+        cfg, base = self.cfg, self.base
+        R = cfg.arena_radius_m
+        n_map = int(math.ceil(2 * R / cfg.map_cell_m))
+        self.grid = GridSpec(origin=Position(x=-R, y=-R), resolution_m=cfg.map_cell_m, rows=n_map, cols=n_map)
+        classifier = load_classifier(model_path)
+        self.confirm_threshold = float(getattr(classifier, "confirm_threshold", None) or classifier.threshold)
+        sspec, espec = cfg.seeker_spec, cfg.extinguisher_spec
+        for i in range(cfg.demo_seekers):
+            sid = f"seeker-{i + 1}"
+            start = Position(x=base.x - 3.0 * (cfg.demo_seekers - 1) + 6.0 * i, y=base.y - 4.0, z=60.0)  # launched
+            ap = SimAutopilot(sspec, start, min_agl_m=0.0, transit_z=cfg.transit_agl_m, vertical_speed_mps=8.0,
+                              accel_mps2=4.0)
+            perc = SeekerPerception(sid, FusedDetector(classifier), grid=self.grid, altimeter_max_m=200.0)
+            self.seekers.append(SeekerAgent(sid, self, ap, perc, executor, player=False))
+        names = {self.station.station_id: (self.station.position, RefillTargetKind.STATION, "base")}
+        for w in self.water_sources:
+            names[w.source_id] = (w.position, RefillTargetKind.WATER_SOURCE, f"lake {w.source_id}")
+        pads = _pads(Position(x=base.x, y=base.y + 2.0, z=0.0), cfg.n_extinguishers, spacing=4.5, cols=10)
+        for i in range(cfg.n_extinguishers):
+            eid = f"ext-{i + 1:02d}"
+            ap = SimAutopilot(espec, pads[i], min_agl_m=0.0, transit_z=cfg.transit_agl_m,
+                              vertical_speed_mps=cfg.vertical_speed_mps)
+            payload = SimPayload(espec.water_capacity_l, espec.water_capacity_l, ExtinguishingAgent.CLASS_A_FOAM)
+            ap.water_kg = (lambda p=payload: p.water_l)
+            payload.on_release = self._release_cb(ap)
+            self.attackers.append(AttackerAgent(eid, i, self, ap, payload, names))
+        self.leader = SwarmLeader("leader", self.bus, self.clock, self._leader_cfg(), self.refill_points(),
+                                  log=self.log.append)
         self.bus.subscribe(SUB_GROUND_ALERTS, self._on_alert)
 
     # ------------------------------------------------------------------------------------------------------------
@@ -122,7 +190,7 @@ class World:
         return cb
 
     def apply_water(self, x: float, y: float, litres: float, agl: float) -> None:
-        on = self.fire.apply_water(x, y, litres, agl)
+        on = self.fire.apply_water(x, y, litres, agl, effect=self.cfg.agent_mult)
         self.stats["dropped_l"] += litres
         self.stats["on_fire_l"] += on
         if litres >= 1.0 or not self.drops or self.clock.now() - self.drops[-1][1] > 0.25:
@@ -136,13 +204,16 @@ class World:
         self.log.append(f"{a.subject_id}: {a.message}")
 
     def all_drone_agents(self):
-        return list(self.seekers) + list(self.exts)
+        return list(self.seekers) + list(self.exts) + list(self.attackers)
 
     # ---- phases ------------------------------------------------------------------------------------------------
     def begin_seek(self) -> None:
         cfg = self.cfg
-        if self.kind == "swarm":
-            zones = DummyZoneAllocator().allocate(cfg.arena_radius_m, [s.id for s in self.seekers])
+        if self.kind in ("swarm", "demo"):
+            spacing = cfg.seeker_spec.thermal.camera.swath_m(cfg.lawnmower_agl_m) * (1.0 - cfg.lawnmower_overlap)
+            zones = EqualTimeZoneAllocator(spacing, self.base).allocate(cfg.arena_radius_m,
+                                                                        [s.id for s in self.seekers])
+            self.zones = zones
             for s in self.seekers:
                 s.assign_zone(zones[s.id], cfg.lawnmower_agl_m, cfg.lawnmower_overlap)
                 s.start_search()
@@ -174,6 +245,8 @@ class World:
             s.tick(now, dt)
         for e in self.exts:
             e.tick(now, dt)
+        for a in self.attackers:
+            a.tick(now, dt)
         if self.player_ext is not None:
             self.player_ext.tick(now, dt, self.apply_water)
         if self.leader is not None:

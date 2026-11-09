@@ -2,6 +2,7 @@
 
 play   human world (player) + swarm world (shadow, same seed) + baseline; the player sees the human world
 watch  swarm world + baseline; spectate the autonomous system
+demo   DEMO mode: large map, seekers + field-refill attackers at the same time for cfg.demo_s, + baseline
 Score: fire_left_% = burning intensity-area(world) / burning intensity-area(baseline) x 100 at the end (lower = better).
 """
 from __future__ import annotations
@@ -13,15 +14,17 @@ from dataclasses import replace
 
 import numpy as np
 
-from contracts import HotspotStatus, Position
+from contracts import HotspotStatus
 from perception.georef import world_to_pixel
-from sim.config import GameConfig
+from sim.attacker import STATUS_TEXT
+from sim.config import DEMO_MAPS, GameConfig, demo_config
 from sim.static import build_static
 from sim.world import World
 
 __all__ = ["PHASES", "Session"]
 
 PHASES = ("BRIEFING", "SEEK", "PLAN", "EXTINGUISH", "SCORE")
+DEMO_PHASES = ("DEMO", "SCORE")
 _STATUS = {HotspotStatus.DETECTED: 0, HotspotStatus.CONFIRMED: 1, HotspotStatus.ASSIGNED: 2,
            HotspotStatus.SUPPRESSED: 3, HotspotStatus.FALSE_POSITIVE: 4, HotspotStatus.VERIFIED_OUT: 3}
 
@@ -42,14 +45,30 @@ def _b64(a: np.ndarray) -> str:
 class Session:
     def __init__(self, map_id: str = "p1", seed: int = 1, mode: str = "play", swarm_seekers: int = 1,
                  cfg: GameConfig | None = None):
-        cfg = cfg or GameConfig()
-        cfg = replace(cfg, swarm_seekers=int(max(1, min(4, swarm_seekers))))
-        self.cfg, self.map_id, self.seed, self.mode = cfg, map_id, int(seed), mode
-        self.static = build_static(cfg, map_id, self.seed)
+        self.map_id, self.seed, self.mode = map_id, int(seed), mode
+        self.follow_id: str | None = None
         ex = _executor()
-        self.swarm = World(cfg, self.static, "swarm", ex, n_seekers=cfg.swarm_seekers)
+        if mode == "demo":
+            info = DEMO_MAPS.get(map_id, DEMO_MAPS["demo-lakes-1"])
+            cfg = cfg if cfg is not None and cfg.demo else demo_config(wet=info["wet"])
+            cfg = replace(cfg, lakes_wet=info["wet"])
+            self.cfg = cfg
+            # wet and dry variants of a map share the layout seed: identical fires, only the water differs
+            self.static = build_static(cfg, info["tiles"], info["layout"] * 1000 + self.seed)
+            self.title = info["title"]
+            self.swarm = World(cfg, self.static, "demo", ex)
+            self.human = None
+            self.phases = DEMO_PHASES
+        else:
+            cfg = cfg or GameConfig()
+            cfg = replace(cfg, swarm_seekers=int(max(1, min(4, swarm_seekers))))
+            self.cfg = cfg
+            self.static = build_static(cfg, map_id, self.seed)
+            self.title = self.static.map.title
+            self.swarm = World(cfg, self.static, "swarm", ex, n_seekers=cfg.swarm_seekers)
+            self.human = World(cfg, self.static, "human", ex) if mode == "play" else None
+            self.phases = PHASES
         self.baseline = World(cfg, self.static, "baseline", None)
-        self.human = World(cfg, self.static, "human", ex) if mode == "play" else None
         self.view = self.human if self.human is not None else self.swarm
         self.worlds = [w for w in (self.human, self.swarm, self.baseline) if w is not None]
         self.phase_i = 0
@@ -57,7 +76,7 @@ class Session:
         self.t = 0.0
         self.paused = False
         self.durations = {"BRIEFING": cfg.briefing_s, "SEEK": cfg.seek_s, "PLAN": cfg.plan_s,
-                          "EXTINGUISH": cfg.extinguish_s, "SCORE": float("inf")}
+                          "EXTINGUISH": cfg.extinguish_s, "DEMO": cfg.demo_s, "SCORE": float("inf")}
         self.plan: dict[str, dict] = {}
         self.swarm_plan: list = []
         self.result: dict | None = None
@@ -67,11 +86,15 @@ class Session:
         if self.human is not None:
             s = self.human.seekers[0]
             s.ap.set_pose(s.ap.start.x, s.ap.start.y, 40.0, 0.0, 0.0)
+        if mode == "demo":                # seekers and extinguishers start together
+            self.swarm.begin_seek()
+            self.swarm.leader.active = True
+            self.metric_at_ext_start = {w.kind: w.fire.fire_metric() for w in self.worlds}
 
     # ---- phases ------------------------------------------------------------------------------------------------
     @property
     def phase(self) -> str:
-        return PHASES[self.phase_i]
+        return self.phases[self.phase_i]
 
     def phase_left(self) -> float:
         d = self.durations[self.phase]
@@ -81,6 +104,9 @@ class Session:
         if self.phase == "SCORE":
             return
         old = self.phase
+        if old == "DEMO":
+            for s in self.swarm.seekers:
+                s.drain()
         self.phase_i += 1
         self.phase_t = 0.0
         new = self.phase
@@ -153,6 +179,9 @@ class Session:
         base = max(self.baseline.fire.fire_metric(), 1e-6)
         out = {"baseline_m2": round(base, 1), "fires_total": len(self.static.fires),
                "decoys_total": len(self.static.decoys)}
+        if self.mode == "demo":
+            out["demo"] = self.demo_stats(final=True)
+            return out
         for key, w in (("human", self.human), ("swarm", self.swarm)):
             if w is None:
                 continue
@@ -168,13 +197,49 @@ class Session:
             }
         return out
 
+    def demo_stats(self, final: bool = False) -> dict:
+        w = self.swarm
+        ld = w.leader
+        base = max(self.baseline.fire.fire_metric(), 1e-6)
+        left = 100.0 * w.fire.fire_metric() / base
+        fills_lake = sum(a.stats["fills_lake"] for a in w.attackers)
+        fills_base = sum(a.stats["fills_base"] for a in w.attackers)
+        out = {
+            "fire_fought_pct": round(max(0.0, 100.0 - left), 1), "fire_left_pct": round(left, 1),
+            "fire_m2": round(w.fire.fire_metric(), 1), "baseline_m2": round(base, 1),
+            "drops": int(ld.stats["drops"]), "fills_lake": fills_lake, "fills_base": fills_base,
+            "suppressed": int(ld.stats["suppressed"]), "verify_hot": int(ld.stats["verify_hot"]),
+            "reopened": int(ld.stats["reopened"]), "confirmed": int(ld.stats["confirmed"]),
+            "queue": len(ld.queue_view(999)), "tasks": ld.n_tasks,
+            "water_dropped_l": round(w.stats["dropped_l"]), "water_on_fire_l": round(w.stats["on_fire_l"]),
+            "seekers": len(w.seekers), "attackers": len(w.attackers), "lakes": len(w.water_sources),
+        }
+        if final:
+            fires, decoys = self._detected(w)
+            out.update({"coverage_pct": round(100.0 * w.coverage_frac(), 1), "fires_detected": fires,
+                        "decoys_reported": decoys, "fires_total": len(self.static.fires),
+                        "wet": bool(self.cfg.lakes_wet)})
+        return out
+
+    def activity(self, w: World) -> dict[str, str]:
+        out = {}
+        for s in w.seekers:
+            z = w.zones.get(s.id)
+            n = sum(1 for t in (w.leader.hotspots.values() if w.leader else []) if s.id in t.sources)
+            what = (f"Lawnmower over zone {z.zone_id} (pass {s.passes + 1}) at {s.ap.z:.0f} m"
+                    if s.searching and z is not None else "Returning to base")
+            out[s.id] = f"{what} · {n} hotspots reported"
+        for a in w.attackers:
+            out[a.id] = a.activity()
+        return out
+
     # ---- client messages ---------------------------------------------------------------------------------------
     def init_message(self) -> dict:
         st, cfg = self.static, self.cfg
         prev = st.ground_preview(cfg.map_cell_m)
         w = self.view
         return {
-            "type": "init", "mode": self.mode, "map": self.map_id, "map_title": st.map.title, "seed": self.seed,
+            "type": "init", "mode": self.mode, "map": self.map_id, "map_title": self.title, "seed": self.seed,
             "real_data": st.map.real, "swarm_seekers": cfg.swarm_seekers,
             "arena_radius": cfg.arena_radius_m, "base": [w.base.x, w.base.y],
             "station": [w.station.position.x, w.station.position.y],
@@ -196,6 +261,11 @@ class Session:
             "water_capacity": cfg.extinguisher_spec.water_capacity_l,
             "bots": [e.id for e in w.exts],
             "player_ext": w.player_ext.drone_id if w.player_ext else None,
+            "lakes": [[lk.lake_id, lk.wet, round(lk.r, 1), [[round(x, 1), round(y, 1)] for x, y in lk.outline()]]
+                      for lk in st.lakes],
+            "n_seekers": len(w.seekers), "n_exts": len(w.exts) + len(w.attackers) + (1 if w.player_ext else 0),
+            "zones": {sid: [[round(p.x, 1), round(p.y, 1)] for p in z.boundary] for sid, z in w.zones.items()},
+            "status_text": STATUS_TEXT,
         }
 
     def _drones(self, w: World) -> list:
@@ -208,6 +278,10 @@ class Session:
             p = e.ap
             out.append([e.id, "e", round(p.x, 2), round(p.y, 2), round(p.z, 2), round(p.yaw, 1),
                         round(e.payload.water_l), e.last_status, False])
+        for a in w.attackers:
+            p = a.ap
+            out.append([a.id, "e", round(p.x, 2), round(p.y, 2), round(p.z, 2), round(p.yaw, 1),
+                        round(a.payload.water_l, 1), a.mode, False])
         if w.player_ext is not None:
             p = w.player_ext.ap
             out.append([w.player_ext.drone_id, "e", round(p.x, 2), round(p.y, 2), round(p.z, 2), round(p.yaw, 1),
@@ -219,10 +293,11 @@ class Session:
             return []
         return [[t.hotspot_id, round(t.hotspot.position.x, 1), round(t.hotspot.position.y, 1),
                  round(t.hotspot.est_area_m2, 1), round(t.hotspot.confidence, 2), _STATUS.get(t.hotspot.status, 0),
-                 round(max(t.remaining_l, 0))] for t in w.leader.hotspots.values()]
+                 round(max(t.remaining_l, 0)), round(getattr(t, "priority", 0.0), 3)]
+                for t in w.leader.hotspots.values()]
 
     def _thermal(self, w: World) -> dict | None:
-        seeker = w.seekers[0] if w.seekers else None
+        seeker = next((s for s in w.seekers if s.id == self.follow_id), w.seekers[0] if w.seekers else None)
         if seeker is None or seeker.last_preview is None:
             return None
         pv = seeker.last_preview
@@ -238,7 +313,7 @@ class Session:
             if uv is not None:
                 boxes.append([round(uv[0] / 4, 1), round(uv[1] / 4, 1), round(h.confidence, 2)])
         return {"w": int(img.shape[1]), "h": int(img.shape[0]), "data": _b64(img), "lo": round(lo, 1),
-                "hi": round(hi, 1), "t": round(pv["t"], 2), "boxes": boxes,
+                "hi": round(hi, 1), "t": round(pv["t"], 2), "boxes": boxes, "id": seeker.id,
                 "tmax": round(float(pv["temp"].max()), 1)}
 
     def snapshot(self) -> dict:
@@ -276,6 +351,13 @@ class Session:
             snap["water_dropped"] = round(w.stats["dropped_l"])
         if self.phase in ("PLAN", "EXTINGUISH") and self.mode == "watch":
             snap["plan"] = [[d, h] for d, h, _ in self.swarm_plan]
+        if self.mode == "demo":
+            if self.snap_i % 3 == 0:
+                snap["acts"] = self.activity(w)
+                snap["links"] = [[d, a.fire_id] for d, a in w.leader.assignments.items()]
+            if self.snap_i % 6 == 0:
+                snap["demo"] = self.demo_stats()
+                snap["queue"] = [[f, round(p, 3), round(l)] for f, p, l in w.leader.queue_view(8)]
         if self.phase == "SCORE" and self.result is not None:
             snap["score"] = self.result
         return snap

@@ -21,7 +21,7 @@ train = ["numpy>=1.26", "scipy>=1.11", "onnxruntime>=1.17", "torch>=2.2", "onnx>
 sim = ["numpy>=1.26", "scipy>=1.11", "onnxruntime>=1.17", "fastapi>=0.110", "uvicorn[standard]>=0.29"]
 
 [tool.setuptools.packages.find]
-include = ["contracts*", "perception*", "training*", "groundbase*", "autonomy*", "sim*"]
+include = ["contracts*", "core*", "perception*", "training*", "groundbase*", "autonomy*", "sim*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

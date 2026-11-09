@@ -9,8 +9,15 @@ const PHASE_LABEL: Record<Phase, string> = {
   SEEK: "Seek",
   PLAN: "Plan",
   EXTINGUISH: "Extinguish",
+  DEMO: "Demo · live",
   SCORE: "Results",
 };
+
+export interface FollowInfo {
+  id: string | null;
+  nextIn: number; // seconds until the camera switches drone (0 = manual / off)
+  period: number;
+}
 
 // inferno-ish LUT for the thermal picture-in-picture
 const LUT = (() => {
@@ -60,6 +67,8 @@ export class Hud {
         <div class="thermal-foot" id="hud-th-foot">FUSED · threshold + CNN (fire_cnn_mix.onnx)</div>
       </div>
       <div class="hint" id="hud-hint"></div>
+      <div class="mouse-hint" id="hud-mouse">Click the view to steer with the mouse · or Q / E · drag also turns</div>
+      <div class="panel follow-card" id="hud-follow"></div>
       <div class="reticle" id="hud-reticle"><div></div></div>
       <div class="toast" id="hud-toast"></div>`;
     ui.appendChild(this.el);
@@ -82,17 +91,25 @@ export class Hud {
     (t as unknown as { _h: number })._h = window.setTimeout(() => t.classList.remove("on"), ms);
   }
 
-  update(player: Player, playerActive: boolean): void {
+  update(player: Player, playerActive: boolean, follow: FollowInfo | null = null): void {
     const s = store.last;
     const init = store.init;
     if (!s || !init) return;
+    if (init.mode === "demo") {
+      this.updateDemo(follow);
+      return;
+    }
+    this.$("#hud-follow").style.display = "none";
+    this.$("#hud-mouse").style.display = playerActive && !player.mouseLocked ? "block" : "none";
     const phase = s.phase;
     const total = init.phases[phase] > 0 ? init.phases[phase] : 1;
     this.$("#hud-phase").textContent = PHASE_LABEL[phase];
     this.$("#hud-timer").textContent = fmtTime(s.phase_left);
     (this.$("#hud-bar") as HTMLElement).style.width = `${Math.max(0, Math.min(100, (s.phase_left / total) * 100))}%`;
     this.el.dataset.phase = phase;
-    this.$("#hud-mode").textContent = init.mode === "watch" ? `AUTONOMOUS SWARM · ${init.swarm_seekers} seeker${init.swarm_seekers > 1 ? "s" : ""}` : "YOU + 9 BOTS";
+    this.$("#hud-mode").textContent = init.mode === "watch"
+      ? `AUTONOMOUS SWARM · ${init.swarm_seekers} seeker${init.swarm_seekers > 1 ? "s" : ""} + ${init.n_exts} extinguishers`
+      : `YOU + ${init.bots.length} BOTS`;
     this.$("#hud-reticle").style.display = playerActive ? "block" : "none";
 
     // telemetry
@@ -168,6 +185,72 @@ export class Hud {
     if (showTh && store.thermal && store.thermal.t !== this.lastThermalT) this.drawThermal(store.thermal);
   }
 
+  private updateDemo(follow: FollowInfo | null): void {
+    const s = store.last!;
+    const init = store.init!;
+    const d = store.demo;
+    this.$("#hud-phase").textContent = PHASE_LABEL[s.phase];
+    this.$("#hud-timer").textContent = fmtTime(s.phase_left);
+    const total = init.phases.DEMO > 0 ? init.phases.DEMO : 1;
+    (this.$("#hud-bar") as HTMLElement).style.width = `${Math.max(0, Math.min(100, (s.phase_left / total) * 100))}%`;
+    this.el.dataset.phase = "EXTINGUISH";
+    const wet = init.lakes.some((l) => l[1]);
+    this.$("#hud-mode").textContent = `DEMO · ${init.n_seekers} SEEKERS + ${init.n_exts} ATTACKERS · ${wet ? `${init.lakes.length} LAKES` : "NO LAKES (BASE ONLY)"}`;
+    this.$("#hud-reticle").style.display = "none";
+    this.$("#hud-mouse").style.display = "none";
+
+    let tele = `<div class="fought"><div class="eyebrow">Fire fought</div><div class="big">${d ? d.fire_fought_pct.toFixed(0) : 0}<span>% vs no drones</span></div></div>`;
+    if (d) {
+      tele += `
+        <div class="tele-row"><span>COVERED</span><b>${store.covPct.toFixed(0)}%</b></div>
+        <div class="tele-row"><span>CONFIRMED FIRES</span><b>${d.confirmed}</b></div>
+        <div class="tele-row"><span>IN QUEUE</span><b>${d.queue}</b></div>
+        <div class="tele-row"><span>DROPS</span><b>${d.drops}</b></div>
+        <div class="tele-row"><span>REFILLS · LAKE</span><b class="${d.fills_lake ? "good" : ""}">${d.fills_lake}</b></div>
+        <div class="tele-row"><span>REFILLS · BASE</span><b>${d.fills_base}</b></div>
+        <div class="tele-row"><span>VERIFY: OUT / HOT</span><b>${d.suppressed} / ${d.verify_hot}</b></div>
+        <div class="sep"></div>
+        <div class="tele-row"><span>FIRE NOW</span><b>${d.fire_m2.toFixed(0)} m²</b></div>
+        <div class="tele-row"><span>NO-DRONE BASELINE</span><b>${d.baseline_m2.toFixed(0)} m²</b></div>
+        <div class="tele-row"><span>FOAM OUT</span><b>${d.water_dropped_l} L</b></div>`;
+    }
+    this.$("#hud-tele").innerHTML = tele;
+
+    const feed = this.$("#hud-feed");
+    feed.style.display = "block";
+    const rows = store.queue
+      .map(([id, p, l]) => `<div class="queue-row"><span>${escapeHtml(id.replace("seeker-", "s"))}</span><i style="width:${Math.max(4, p * 100)}%"></i><span>${l.toFixed(0)} L</span></div>`)
+      .join("");
+    feed.innerHTML = `<div class="feed-title">priority queue · max-heap (size × growth × heat)</div>${rows || `<div class="feed-line">waiting for seekers to confirm fires…</div>`}` +
+      (store.log.length ? `<div class="feed-title" style="margin-top:10px">leader</div>` + store.log.slice(-3).map((l) => `<div class="feed-line">${escapeHtml(l)}</div>`).join("") : "");
+
+    const card = this.$("#hud-follow");
+    const fid = follow?.id ?? null;
+    if (fid) {
+      const row = store.drones.find((r) => r[0] === fid);
+      const seeker = row?.[1] === "s";
+      const color = seeker ? "#b49cff" : "#4fd1ff";
+      const act = store.acts[fid] ?? (row ? init.status_text[row[7]] ?? row[7] : "");
+      const next = follow && follow.nextIn > 0
+        ? `<div class="next">next drone in ${Math.ceil(follow.nextIn)} s<i><b style="width:${(follow.nextIn / follow.period) * 100}%"></b></i></div>`
+        : `<div class="next">manual · Tab next · A auto</div>`;
+      card.innerHTML = `<div class="swatch" style="color:${color};background:${color}"></div>
+        <div><div class="who">${escapeHtml(fid)}<small>${seeker ? "seeker · thermal search" : "attacker · field refill"}</small></div>
+        <div class="what">${escapeHtml(act)}</div></div>${next}`;
+      card.style.display = "flex";
+    } else card.style.display = "none";
+
+    this.$("#hud-hint").textContent = "Camera hops drone every 10 s · Tab next · A auto on/off · F free camera · drag orbit · scroll zoom · Esc pause";
+
+    const size = this.mini.width;
+    drawMap(this.miniCtx, size, { reveal: false, showFire: true, hotspots: true, drones: true, zones: true, links: true, highlight: fid });
+    this.$("#hud-mini-label").textContent = "swarm map · true fire · lakes";
+
+    const showTh = this.showThermal && store.thermal && s.phase !== "SCORE";
+    this.$("#hud-thermal").style.display = showTh ? "block" : "none";
+    if (showTh && store.thermal && store.thermal.t !== this.lastThermalT) this.drawThermal(store.thermal);
+  }
+
   private drawThermal(th: ThermalMsg): void {
     this.lastThermalT = th.t;
     const bytes = b64bytes(th.data);
@@ -193,7 +276,7 @@ export class Hud {
       this.thCtx.font = "8px JetBrains Mono, monospace";
       this.thCtx.fillText(`${Math.round(conf * 100)}`, u + 7, v - 4);
     }
-    this.$("#hud-tmax").textContent = `${th.lo.toFixed(0)}–${th.hi.toFixed(0)} °C · max ${th.tmax.toFixed(0)} °C`;
+    this.$("#hud-tmax").textContent = `${th.id ? `${th.id} · ` : ""}${th.lo.toFixed(0)}–${th.hi.toFixed(0)} °C · max ${th.tmax.toFixed(0)} °C`;
   }
 }
 

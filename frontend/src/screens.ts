@@ -8,10 +8,11 @@ export interface StartOpts {
   seekers: number;
 }
 
-interface MapInfo {
+export interface MapInfo {
   id: string;
   title: string;
   available: boolean;
+  wet?: boolean;
 }
 
 function el(html: string): HTMLElement {
@@ -33,6 +34,10 @@ export class Screens {
   onMenu: () => void = () => {};
   onWatch: () => void = () => {};
   onSkip: () => void = () => {};
+  onDemoMap: (mapId: string) => void = () => {};
+  private maps: MapInfo[] = [];
+  private demoMaps: MapInfo[] = [];
+  private mapByMode: Record<string, string> = { play: "p1", watch: "p1", demo: "demo-lakes-1" };
 
   constructor(ui: HTMLElement) {
     this.menu = el(`
@@ -40,18 +45,20 @@ export class Screens {
         <div class="menu-card panel">
           <div class="eyebrow">natHacks 2026 · Team Pandas</div>
           <h1>Night Initial Attack</h1>
-          <p class="lede">A night of spot fires. Find them with a thermal seeker, plan, then knock them down with ten
-            heavy extinguisher drones. Then see if our autonomous swarm did better on the exact same map.</p>
+          <p class="lede">A night of spot fires. Find them with a thermal seeker, plan, then knock them down with a
+            fleet of heavy extinguisher drones. Then see if our autonomous swarm did better on the exact same map.
+            Or run <b>DEMO</b>: a whole cluster, seekers and field-refill attackers at once, lakes as refill points.</p>
           <div class="field"><label>Mode</label>
             <div class="seg" data-k="mode">
-              <button data-v="play" class="on">Play <small>you + 9 bots</small></button>
+              <button data-v="play" class="on">Play <small>you + 18 bots</small></button>
               <button data-v="watch">Watch swarm <small>fully autonomous</small></button>
+              <button data-v="demo">DEMO <small>large map · 48 drones</small></button>
             </div></div>
           <div class="field"><label>Map</label><div class="seg" data-k="map" id="menu-maps"></div></div>
           <div class="row2">
             <div class="field"><label>Seed</label>
               <div class="seed"><input id="menu-seed" type="number" min="0" value="1" /><button class="btn ghost" id="menu-dice" title="Random seed">⚄</button></div></div>
-            <div class="field"><label>Swarm seekers</label>
+            <div class="field" id="menu-seekers-field"><label>Swarm seekers</label>
               <div class="seg small" data-k="seekers">
                 <button data-v="1" class="on">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button>
               </div></div>
@@ -65,7 +72,8 @@ export class Screens {
             <li><b>Thermal world</b> built from FLAME 3 NADIR radiometric frames (Hanna Hammock): real ground, real char, real fire pixels.</li>
             <li><b>Perception</b>: every seeker frame (640×512, rendered from that data) runs our threshold proposals + CNN verifier (ONNX), georeferencing, tracker and log-odds map. The map you plan on is what it actually saw.</li>
             <li><b>Autonomy</b>: extinguishers execute through our mission planner, CBS paths, path claims, drop safety gate and refill flow. Swarm seekers fly our lawnmower coverage.</li>
-            <li><b>Stubbed</b>: swarm brain (zone split, task assignment, refill choice) — dummy versions for now.</li>
+            <li><b>Swarm brain</b> (<code>core/</code>): fires go on a max-heap by size × growth × heat; each goes to the extinguisher with the lowest refill-aware ETA (drone → best refill point → fire); failed VERIFY puts the fire back on the heap; seekers get equal-time zones.</li>
+            <li><b>DEMO</b>: small attackers mix foam into water from any lake or the base and refill after every drop. Same map with dry basins for comparison.</li>
           </ul>
           <h3>Scoring</h3>
           <p class="muted">% fire left vs. the same map with no drones at all (100%). Lower is better.</p>
@@ -78,8 +86,8 @@ export class Screens {
           <h2 id="brief-title">Seek · 75 s</h2>
           <div class="brief-grid">
             <div><b>1 · Seek</b><span>Fly the only seeker. Wherever its camera looks, the map fills in and our detector finds hotspots. Higher = wider view, coarser pixels.</span></div>
-            <div><b>2 · Plan</b><span>30 s on the map you revealed. Send 9 bots to fires or areas.</span></div>
-            <div><b>3 · Extinguish</b><span>Fly the 10th extinguisher yourself. Get low, hold Space over fire. Refill on the base pads.</span></div>
+            <div><b>2 · Plan</b><span>30 s on the map you revealed. Send your bots to fires or areas.</span></div>
+            <div><b>3 · Extinguish</b><span>Fly one extinguisher yourself. Get low, hold Space over fire. Refill on the base pads.</span></div>
           </div>
           <div class="keys">
             <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
@@ -123,6 +131,11 @@ export class Screens {
         const k = seg.dataset.k as keyof StartOpts;
         const v = b.dataset.v!;
         (this.opts as unknown as Record<string, unknown>)[k] = k === "seekers" ? Number(v) : v;
+        if (k === "map") this.mapByMode[this.opts.mode] = v;
+        if (k === "mode") {
+          this.opts.map = this.mapByMode[v];
+          this.renderMaps();
+        }
       });
     });
     const seed = this.menu.querySelector("#menu-seed") as HTMLInputElement;
@@ -134,11 +147,28 @@ export class Screens {
     this.menu.querySelector("#menu-go")!.addEventListener("click", () => this.onStart({ ...this.opts }));
   }
 
-  setMaps(maps: MapInfo[]): void {
+  setMaps(maps: MapInfo[], demoMaps: MapInfo[] = []): void {
+    this.maps = maps;
+    this.demoMaps = demoMaps.length ? demoMaps : [
+      { id: "demo-lakes-1", title: "DEMO · Lakes · Hanna Hammock 1", available: true, wet: true },
+      { id: "demo-dry-1", title: "DEMO · Dry basins · Hanna Hammock 1", available: true, wet: false },
+    ];
+    this.renderMaps();
+  }
+
+  private renderMaps(): void {
     const box = this.menu.querySelector("#menu-maps")!;
-    box.innerHTML = maps
-      .map((m) => `<button data-v="${m.id}" class="${m.id === this.opts.map ? "on" : ""}" ${m.available ? "" : "disabled title='dataset not on this machine'"}>${m.title}</button>`)
+    const demo = this.opts.mode === "demo";
+    const list = demo ? this.demoMaps : this.maps;
+    box.innerHTML = list
+      .map((m) => `<button data-v="${m.id}" class="${m.id === this.opts.map ? "on" : ""}" ${m.available ? "" : "disabled title='dataset not on this machine'"}>${m.title.replace("DEMO · ", "")}</button>`)
       .join("");
+    (this.menu.querySelector("#menu-seekers-field") as HTMLElement).style.visibility = demo ? "hidden" : "visible";
+  }
+
+  /** The other DEMO variant of the same layout (lakes <-> dry basins). */
+  static otherDemoMap(id: string): string {
+    return id.includes("lakes") ? id.replace("lakes", "dry") : id.replace("dry", "lakes");
   }
 
   setStatus(text: string, ok: boolean): void {
@@ -160,6 +190,10 @@ export class Screens {
     const sc = store.score;
     const init = store.init;
     if (!sc || !init) return;
+    if (sc.demo) {
+      this.showDemoScore();
+      return;
+    }
     const side = (label: string, cls: string, s?: ScoreSide) =>
       s
         ? `<div class="score-side ${cls}">
@@ -179,13 +213,13 @@ export class Screens {
     let verdict = "";
     if (sc.human && sc.swarm) {
       const d = sc.human.fire_left_pct - sc.swarm.fire_left_pct;
-      verdict = d > 1 ? `The swarm left <b>${d.toFixed(0)} points</b> less fire than you.` : d < -1 ? `You beat the swarm by <b>${(-d).toFixed(0)} points</b>. (Its brain is still a stub…)` : "Dead heat.";
+      verdict = d > 1 ? `The swarm left <b>${d.toFixed(0)} points</b> less fire than you.` : d < -1 ? `You beat the swarm by <b>${(-d).toFixed(0)} points</b>.` : "Dead heat.";
     }
     this.score.innerHTML = `
       <div class="panel score-card">
         <div class="eyebrow">Results · ${init.map_title} · seed ${init.seed}</div>
         <h2>${verdict || "Autonomous swarm"}</h2>
-        <div class="score-grid">${side("You + 9 bots", "human", sc.human)}${side(`Autonomous swarm · ${init.swarm_seekers} seeker${init.swarm_seekers > 1 ? "s" : ""}`, "swarm", sc.swarm)}</div>
+        <div class="score-grid">${side(`You + ${init.bots.length} bots`, "human", sc.human)}${side(`Autonomous swarm · ${init.swarm_seekers} seeker${init.swarm_seekers > 1 ? "s" : ""}`, "swarm", sc.swarm)}</div>
         <p class="muted small">No-action baseline on the same map: ${sc.baseline_m2.toFixed(0)} m² burning (= 100%). Same seed, same fire physics, same perception and autonomy code on both sides.</p>
         <div class="score-actions">
           <button class="btn primary" id="sc-again">Play again</button>
@@ -197,6 +231,42 @@ export class Screens {
     this.score.querySelector("#sc-again")!.addEventListener("click", () => this.onRestart(false));
     this.score.querySelector("#sc-new")!.addEventListener("click", () => this.onRestart(true));
     this.score.querySelector("#sc-watch")!.addEventListener("click", () => this.onWatch());
+    this.score.querySelector("#sc-menu")!.addEventListener("click", () => this.onMenu());
+    this.only(this.score);
+  }
+
+  private showDemoScore(): void {
+    const init = store.init!;
+    const d = store.score!.demo!;
+    const other = Screens.otherDemoMap(init.map);
+    const wet = !!d.wet;
+    const fills = d.fills_lake + d.fills_base;
+    this.score.innerHTML = `
+      <div class="panel score-card demo-score">
+        <div class="eyebrow">DEMO results · ${init.map_title} · seed ${init.seed}</div>
+        <div class="big">${d.fire_fought_pct.toFixed(0)}<span>% fire fought vs. the same map with no drones</span></div>
+        <div class="bar" style="margin:14px 0 6px"><div style="width:${Math.min(100, d.fire_fought_pct)}%"></div></div>
+        <table>
+          <tr><td>Drones</td><td>${d.seekers} seekers + ${d.attackers} attackers</td></tr>
+          <tr><td>Map covered by seeker cameras</td><td>${(d.coverage_pct ?? 0).toFixed(0)}%</td></tr>
+          <tr><td>Fires detected</td><td>${d.fires_detected ?? 0} / ${d.fires_total ?? 0}</td></tr>
+          <tr><td>Decoys reported as fire</td><td>${d.decoys_reported ?? 0}</td></tr>
+          <tr><td>Drops (≈15 L foam each)</td><td>${d.drops}</td></tr>
+          <tr><td>Refills at lakes / at base</td><td>${d.fills_lake} / ${d.fills_base}${fills ? ` (${((100 * d.fills_lake) / fills).toFixed(0)}% lakes)` : ""}</td></tr>
+          <tr><td>VERIFY: suppressed / still hot → back on the heap</td><td>${d.suppressed} / ${d.verify_hot}</td></tr>
+          <tr><td>Foam dropped / landing on fire</td><td>${d.water_dropped_l} L / ${d.water_on_fire_l} L</td></tr>
+        </table>
+        <p class="muted small">${wet ? "Lakes on: attackers refill at whichever point (lake or base) gives the shortest drone → refill → fire trip." : "No lakes (dry basins): every refill is a trip to the base, so the allocator degrades to highest-priority-first."} Same fires, seeds and perception on both variants — run the other one to compare.</p>
+        <div class="score-actions">
+          <button class="btn primary" id="sc-other">Run ${wet ? "without lakes" : "with lakes"} (same fires)</button>
+          <button class="btn" id="sc-again">Replay</button>
+          <button class="btn" id="sc-new">New seed</button>
+          <button class="btn ghost" id="sc-menu">Menu</button>
+        </div>
+      </div>`;
+    this.score.querySelector("#sc-other")!.addEventListener("click", () => this.onDemoMap(other));
+    this.score.querySelector("#sc-again")!.addEventListener("click", () => this.onRestart(false));
+    this.score.querySelector("#sc-new")!.addEventListener("click", () => this.onRestart(true));
     this.score.querySelector("#sc-menu")!.addEventListener("click", () => this.onMenu());
     this.only(this.score);
   }
