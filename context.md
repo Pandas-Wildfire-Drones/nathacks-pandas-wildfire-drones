@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.5` · `contract_version: 0.3.0` · last updated 2026-11-08
+`context_version: 0.3.6` · `contract_version: 0.3.0` · last updated 2026-11-08
 
 ---
 
@@ -1994,6 +1994,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-08 | sim chat (integration) | v0.3.6: added `sim/` (Python game/sim server: FLAME 3 NADIR thermal maps, fire CA, thermal renderer, SimBus, SimAutopilot/SimPayload, real perception + autonomy in the loop, swarm-brain STUBS in `sim/brain_stub.py`, shadow-run scoring) and `frontend/` (three.js + TS game client, pnpm); `tests/sim/` (6 tests); `pyproject` extra `[sim]`, packages `autonomy*`/`sim*`; no contract changes. Details: `sim/README.md`, `exclude/simulator_task.md` | demo: human + bots vs autonomous swarm on the same seed |
 | 2026-11-08 | merge (C) | v0.3.5: merged `main` into `DoqCA/flame3-geometry` (contracts 0.3.0 cluster coordination, per-drone autonomy, CBS deconfliction, mission planning); resolved `.gitignore` (main's layout + `.env*`) and this header/changelog; no contract changes on this side | keep the perception branch current with main |
 | 2026-11-08 | perception chat (C) | v0.3.4: FLAME 3 NADIR downloaded + history-labelled (`build_nadir.py`), Sycan weak masks (`build_sycan_weak.py`), ignore masks (`MASK_IGNORE`) through datasets/evaluation/patches/evaluate/compare, hard-example sampling + GT cap in `patch_data.py`/`train_cnn.py`, point-level NADIR view, six test views + matrix CLI (`eval_sets.py`), notebook rebuilt (models × views), `fire_cnn_mix.onnx` (mix_v2) recommended; `imagecodecs` in `[train]`; 120 tests; no contract changes | user asked to train/test on NADIR and see all test combinations |
 | 2026-11-08 | perception chat (C) | v0.3.3: `perception/triage.py` (FIRE/REVIEW/NOT_FIRE bands), `training/compare.py` + `compare_plots.py` + `compare_approaches.ipynb` (three approaches, threshold sliders, ROC/PR, sweep heatmaps, reliability, error gallery); hand-label comparison in RESULTS.md; `ipywidgets` in `[train]`; 114 tests; no contract changes | user asked where to compare model / algorithmic / pipeline and try 3-band thresholds |
