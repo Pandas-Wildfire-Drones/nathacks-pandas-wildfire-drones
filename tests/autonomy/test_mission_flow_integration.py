@@ -18,7 +18,13 @@ from contracts.enums import (
     TaskType,
 )
 from contracts.geometry import GridSpec, Position
-from contracts.messages import PathClaim, SwarmMessage, TaskAssign, TaskComplete
+from contracts.messages import (
+    PathClaim,
+    RefillRequest,
+    SwarmMessage,
+    TaskAssign,
+    TaskComplete,
+)
 
 
 class FakeBus:
@@ -249,6 +255,22 @@ def test_resource_failure_blocks_cbs_and_mission(
     )
 
     result = adapter.handle_message(make_assignment())
+
+    if "water_remaining_l" in drone_updates:
+        assert result.status == "REFILL_REQUESTED"
+        assert autopilot.events == []
+        assert payload.release_calls == []
+        assert adapter.state.current_task is not None
+        assert adapter.state.refill_request_outstanding
+        assert sum(
+            isinstance(message.body, RefillRequest)
+            for _, message in bus.published
+        ) == 1
+        assert not any(
+            topic == "swarm/path_claims"
+            for topic, _ in bus.published
+        )
+        return
 
     assert result is None
     assert autopilot.events == []

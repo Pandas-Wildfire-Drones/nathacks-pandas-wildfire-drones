@@ -23,13 +23,24 @@ from autonomy.mission_coordinator import (
     MissionPlanningContext,
 )
 from autonomy.path_claim_manager import PathClaimManager
-from contracts.entities import Alert, DroneState, Hotspot, Task
+from autonomy.refill_manager import execute_water_refill
+from autonomy.resource_manager import ResourceAssessment
+from contracts.entities import (
+    Alert,
+    DroneState,
+    Hotspot,
+    RefillStation,
+    Task,
+    WaterSource,
+)
 from contracts.geometry import GridSpec, Position
 from contracts.enums import (
     AlertKind,
     DroneKind,
     HotspotStatus,
     MessageType,
+    Powertrain,
+    RefillTargetKind,
     Severity,
     TaskStatus,
     TaskType,
@@ -40,11 +51,12 @@ from contracts.messages import (
     HotspotReport,
     PathClaim,
     RefillGrant,
+    RefillRequest,
     SwarmMessage,
     TaskAssign,
     TaskComplete,
 )
-from contracts.topics import ROUTES, topic_for
+from contracts.topics import ROUTES, sub_my_commands, topic_for
 
 
 @dataclass
@@ -56,6 +68,14 @@ class SwarmAutonomyState:
     latest_heartbeat: Heartbeat | None = None
     latest_refill_grant: RefillGrant | None = None
     latest_path_claim: PathClaim | None = None
+    refill_request_outstanding: bool = False
+    refill_request_epoch: int | None = None
+    refill_request_time: float | None = None
+    refill_request_volume_l: float = 0.0
+    refill_needs_fuel: bool = False
+    refill_navigation_started: bool = False
+    refill_target: WaterSource | RefillStation | None = None
+    last_refill_water_added_l: float = 0.0
 
     # Path claims belonging to other drones are retained separately from
     # this drone's own claim. Local autonomy uses these claims only for
@@ -79,12 +99,17 @@ class SwarmAutonomyAdapter:
         *,
         planning_context: MissionPlanningContext | None = None,
         altitude_agl_provider: Callable[[DroneState], float] | None = None,
+        refill_target_resolver: Callable[
+            [RefillGrant],
+            WaterSource | RefillStation | None,
+        ] | None = None,
     ) -> None:
         self.drone = drone
         self.controller = controller
         self.bus = bus
         self.planning_context = planning_context
         self.altitude_agl_provider = altitude_agl_provider
+        self.refill_target_resolver = refill_target_resolver
         self.path_claim_manager = PathClaimManager(bus)
         self.mission_coordinator = MissionCoordinator(
             drone,
@@ -102,6 +127,7 @@ class SwarmAutonomyAdapter:
         """Subscribe to topics relevant to this drone."""
 
         topics = (
+            sub_my_commands(self.drone.drone_id),
             "swarm/task_assign",
             "swarm/heartbeat",
             "swarm/hotspot_report",
@@ -274,6 +300,21 @@ class SwarmAutonomyAdapter:
             )
             return None
 
+        return self._plan_and_begin(
+            message,
+            task,
+            hotspot,
+            allow_refill_request=True,
+        )
+
+    def _plan_and_begin(
+        self,
+        message: SwarmMessage | None,
+        task: Task,
+        hotspot: Hotspot,
+        *,
+        allow_refill_request: bool,
+    ) -> MissionExecutionResult | None:
         context = self.planning_context
         if context is None:
             self._publish_alert(
@@ -282,7 +323,6 @@ class SwarmAutonomyAdapter:
                 "configuration is unavailable",
             )
             return None
-
         try:
             planning = self.mission_coordinator.plan_task(
                 task,
@@ -297,6 +337,30 @@ class SwarmAutonomyAdapter:
             )
             return None
         if not planning.accepted or planning.plan is None:
+            assessment = planning.resource_assessment
+            needs_refill = (
+                assessment is not None
+                and (
+                    assessment.water_margin_liters < 0
+                    or (
+                        task.volume_l is None
+                        and assessment.water_available_liters <= 0
+                    )
+                )
+            )
+            if allow_refill_request and needs_refill:
+                try:
+                    return self._request_refill(
+                        task,
+                        hotspot,
+                        assessment,
+                    )
+                except ValueError as exc:
+                    self._publish_alert(
+                        message,
+                        f"Unable to request water refill: {exc}",
+                    )
+                    return None
             self._publish_alert(message, planning.reason)
             return None
 
@@ -341,6 +405,80 @@ class SwarmAutonomyAdapter:
 
         return result
 
+    def _request_refill(
+        self,
+        task: Task,
+        hotspot: Hotspot,
+        assessment: ResourceAssessment,
+    ) -> MissionExecutionResult:
+        context = self.planning_context
+        if context is None:
+            raise ValueError("Mission planning configuration is unavailable")
+        if self.drone.agent is None:
+            raise ValueError("Drone has no loaded extinguishing agent")
+        if self.state.refill_request_outstanding:
+            return MissionExecutionResult(
+                status="REFILL_REQUESTED",
+                success=True,
+                water_used_l=0.0,
+                reason="Waiting for an approved refill grant",
+            )
+
+        capacity_l = context.platform_spec.water_capacity_l
+        current_water_l = self.drone.water_remaining_l or 0.0
+        required_water_l = (
+            task.volume_l
+            if task.volume_l is not None
+            else capacity_l
+        )
+        requested_volume_l = min(
+            capacity_l - current_water_l,
+            max(0.0, required_water_l - current_water_l),
+        )
+        if requested_volume_l <= 0:
+            raise ValueError("No refill volume is required or available")
+
+        needs_fuel = (
+            self.drone.powertrain is Powertrain.HYBRID
+            and any("fuel" in reason.lower() for reason in assessment.reasons)
+        )
+        request = RefillRequest(
+            drone_id=self.drone.drone_id,
+            position=self.drone.position,
+            water_remaining_l=current_water_l,
+            agent=self.drone.agent,
+            fuel_remaining_kg=self.drone.fuel_remaining_kg,
+            needs_fuel=needs_fuel,
+        )
+        request_message = SwarmMessage.create(
+            sender_id=self.drone.drone_id,
+            body=request,
+            now=self.now,
+            epoch=self.drone.epoch,
+        )
+
+        self.state.current_task = task
+        self.state.current_hotspot = hotspot
+        self.state.refill_request_outstanding = True
+        self.state.refill_request_epoch = self.drone.epoch
+        self.state.refill_request_time = self.now
+        self.state.refill_request_volume_l = requested_volume_l
+        self.state.refill_needs_fuel = needs_fuel
+        try:
+            self.bus.publish(topic_for(request_message), request_message)
+        except (RuntimeError, ValueError):
+            self._clear_refill_state()
+            self.state.current_task = None
+            self.state.current_hotspot = None
+            raise
+
+        return MissionExecutionResult(
+            status="REFILL_REQUESTED",
+            success=True,
+            water_used_l=0.0,
+            reason="Waiting for an approved refill grant",
+        )
+
     def step(self) -> MissionExecutionResult | None:
         """Advance the currently assigned local mission by one control step."""
 
@@ -350,6 +488,15 @@ class SwarmAutonomyAdapter:
 
         if task is None or hotspot is None:
             return None
+
+        if self.state.refill_request_outstanding:
+            if (
+                self.state.refill_request_epoch != self.drone.epoch
+                or task.epoch != self.drone.epoch
+            ):
+                return self._fail_refill(
+                    "Refill mission became stale after an epoch change",
+                )
 
         health = evaluate_drone_health(self.drone)
 
@@ -366,10 +513,25 @@ class SwarmAutonomyAdapter:
                 None,
                 f"Autonomy blocked mission: {health.reason}",
             )
+            if self.state.refill_request_outstanding:
+                return self._fail_refill(
+                    f"Refill blocked by drone health: {health.reason}",
+                    already_alerted=True,
+                )
             return None
 
         if task.type is not TaskType.EXTINGUISH:
             return None
+
+        if self.state.refill_request_outstanding:
+            if self.state.latest_refill_grant is None:
+                return MissionExecutionResult(
+                    status="REFILL_REQUESTED",
+                    success=True,
+                    water_used_l=0.0,
+                    reason="Waiting for an approved refill grant",
+                )
+            return self._advance_refill()
 
         # Position.z is height above the scenario datum, not AGL. Without
         # an environment-provided conversion, release must remain blocked.
@@ -581,19 +743,323 @@ class SwarmAutonomyAdapter:
         message: SwarmMessage,
         grant: RefillGrant,
     ) -> None:
-        """Record a refill grant only for this drone and current epoch."""
+        """Validate an approved refill target before navigating to it."""
 
         if grant.drone_id != self.drone.drone_id:
             return
 
-        if grant.epoch != self.drone.epoch:
+        if (
+            message.receiver_id is not None
+            and message.receiver_id != self.drone.drone_id
+        ):
+            self._publish_alert(
+                message,
+                "Rejected refill grant sent to another drone",
+            )
+            return
+
+        request_time = self.state.refill_request_time
+        if (
+            not self.state.refill_request_outstanding
+            or self.state.refill_request_epoch != self.drone.epoch
+            or grant.epoch != self.drone.epoch
+            or (
+                message.epoch is not None
+                and message.epoch != self.drone.epoch
+            )
+            or (
+                request_time is not None
+                and message.timestamp < request_time
+            )
+            or message.is_expired(self.now)
+        ):
             self._publish_alert(
                 message,
                 "Rejected stale refill grant",
             )
             return
 
+        task = self.state.current_task
+        hotspot = self.state.current_hotspot
+        if (
+            task is None
+            or hotspot is None
+            or task.type is not TaskType.EXTINGUISH
+            or task.epoch != self.drone.epoch
+            or not self.controller.ready_for_mission
+        ):
+            self._fail_refill(
+                "Rejected refill grant because no valid mission is awaiting refill",
+                message=message,
+            )
+            return
+
+        health = evaluate_drone_health(self.drone)
+        if not health.safe:
+            self._fail_refill(
+                f"Rejected refill grant because drone is unsafe: {health.reason}",
+                message=message,
+            )
+            return
+
+        if self.refill_target_resolver is None:
+            self._fail_refill(
+                "Refill target resolver is unavailable",
+                message=message,
+            )
+            return
+
+        target = self.refill_target_resolver(grant)
+        target_id = (
+            target.source_id if isinstance(target, WaterSource)
+            else target.station_id if isinstance(target, RefillStation)
+            else None
+        )
+        expected_kind = (
+            RefillTargetKind.WATER_SOURCE
+            if isinstance(target, WaterSource)
+            else RefillTargetKind.STATION
+            if isinstance(target, RefillStation)
+            else None
+        )
+        if (
+            target is None
+            or target_id != grant.target_id
+            or expected_kind is not grant.target_kind
+            or target.position != grant.position
+        ):
+            self._fail_refill(
+                "Granted refill target is unavailable or does not match the grant",
+                message=message,
+            )
+            return
+
+        if (
+            self.state.refill_needs_fuel
+            and not isinstance(target, RefillStation)
+        ):
+            self._fail_refill(
+                "Hybrid fuel refill requires an approved refill station",
+                message=message,
+            )
+            return
+
         self.state.latest_refill_grant = grant
+        self.state.refill_target = target
+        result = self._advance_refill(message)
+        if result is not None and result.status == "DONE":
+            return
+
+    def _advance_refill(
+        self,
+        message: SwarmMessage | None = None,
+    ) -> MissionExecutionResult:
+        task = self.state.current_task
+        hotspot = self.state.current_hotspot
+        grant = self.state.latest_refill_grant
+        target = self.state.refill_target
+        autopilot = self.controller.autopilot
+        payload = self.controller.payload
+        if (
+            task is None
+            or hotspot is None
+            or grant is None
+            or target is None
+            or autopilot is None
+            or payload is None
+        ):
+            return self._fail_refill(
+                "Refill execution is missing mission, target, autopilot, or payload",
+                message=message,
+            )
+
+        if (
+            self.drone.epoch != self.state.refill_request_epoch
+            or grant.epoch != self.drone.epoch
+            or task.epoch != self.drone.epoch
+        ):
+            return self._fail_refill(
+                "Refill grant or mission epoch became stale",
+                message=message,
+            )
+
+        health = evaluate_drone_health(self.drone)
+        if not health.safe:
+            return self._fail_refill(
+                f"Refill stopped because drone is unsafe: {health.reason}",
+                message=message,
+            )
+
+        if (
+            task.assigned_to != self.drone.drone_id
+            or task.status not in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
+            or task.type is not TaskType.EXTINGUISH
+            or task.target_hotspot_id != hotspot.hotspot_id
+            or (
+                hotspot.assigned_to is not None
+                and hotspot.assigned_to != self.drone.drone_id
+            )
+            or hotspot.status not in (
+                HotspotStatus.CONFIRMED,
+                HotspotStatus.ASSIGNED,
+            )
+        ):
+            return self._fail_refill(
+                "Refill stopped because the extinguisher task or hotspot is no longer valid",
+                message=message,
+            )
+
+        if self.state.refill_navigation_started and not autopilot.at_target():
+            return MissionExecutionResult(
+                status="REFILL_TRANSIT",
+                success=True,
+                water_used_l=0.0,
+                reason="Travelling to approved refill target",
+            )
+
+        old_payload_water = payload.water_remaining_l()
+        try:
+            result = execute_water_refill(
+                self.drone,
+                autopilot,
+                payload,
+                grant.position,
+                self.state.refill_request_volume_l,
+                source=target if isinstance(target, WaterSource) else None,
+                station=target if isinstance(target, RefillStation) else None,
+            )
+        except (ValueError, RuntimeError) as exc:
+            self.drone.water_remaining_l = payload.water_remaining_l()
+            return self._fail_refill(
+                f"Water refill failed: {exc}",
+                message=message,
+            )
+
+        if result.status == "TRANSIT":
+            self.state.refill_navigation_started = True
+            return MissionExecutionResult(
+                status="REFILL_TRANSIT",
+                success=True,
+                water_used_l=0.0,
+                reason=result.reason,
+            )
+
+        if not result.success or result.water_added_l <= 0:
+            return self._fail_refill(
+                result.reason or "Water refill failed",
+                message=message,
+            )
+
+        new_payload_water = payload.water_remaining_l()
+        actual_delta_l = new_payload_water - old_payload_water
+        self.drone.water_remaining_l = new_payload_water
+        self.state.last_refill_water_added_l = result.water_added_l
+        if abs(actual_delta_l - result.water_added_l) > 1e-6:
+            return self._fail_refill(
+                "Payload water inventory does not match the actual refill amount",
+                message=message,
+            )
+
+        self._clear_refill_state()
+        return self._revalidate_and_resume(task, hotspot, message)
+
+    def _revalidate_and_resume(
+        self,
+        task: Task,
+        hotspot: Hotspot,
+        message: SwarmMessage | None,
+    ) -> MissionExecutionResult:
+        if task.epoch != self.drone.epoch:
+            return self._fail_refill(
+                "Mission epoch changed before refill resume",
+                message=message,
+            )
+
+        health = evaluate_drone_health(self.drone)
+        if not health.safe:
+            return self._fail_refill(
+                f"Mission cannot resume because drone is unsafe: {health.reason}",
+                message=message,
+            )
+
+        if (
+            task.assigned_to != self.drone.drone_id
+            or task.status not in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
+            or task.type is not TaskType.EXTINGUISH
+            or hotspot.hotspot_id != task.target_hotspot_id
+            or (
+                hotspot.assigned_to is not None
+                and hotspot.assigned_to != self.drone.drone_id
+            )
+            or hotspot.status not in (
+                HotspotStatus.CONFIRMED,
+                HotspotStatus.ASSIGNED,
+            )
+        ):
+            return self._fail_refill(
+                "Mission cannot resume because task or hotspot validation failed",
+                message=message,
+            )
+
+        if not self.controller.ready_for_mission:
+            return self._fail_refill(
+                "Mission cannot resume because controller is not ready",
+                message=message,
+            )
+
+        result = self._plan_and_begin(
+            message,
+            task,
+            hotspot,
+            allow_refill_request=False,
+        )
+        if result is None or not result.success:
+            return self._fail_refill(
+                "Mission revalidation failed after refill",
+                message=message,
+            )
+        return result
+
+    def _clear_refill_state(self) -> None:
+        self.state.latest_refill_grant = None
+        self.state.refill_request_outstanding = False
+        self.state.refill_request_epoch = None
+        self.state.refill_request_time = None
+        self.state.refill_request_volume_l = 0.0
+        self.state.refill_needs_fuel = False
+        self.state.refill_navigation_started = False
+        self.state.refill_target = None
+
+    def _fail_refill(
+        self,
+        reason: str,
+        *,
+        message: SwarmMessage | None = None,
+        already_alerted: bool = False,
+    ) -> MissionExecutionResult:
+        task = self.state.current_task
+        health = evaluate_drone_health(self.drone)
+        autopilot = self.controller.autopilot
+        if autopilot is not None:
+            if not health.safe and health.action == "RETURN":
+                autopilot.return_to_launch()
+            else:
+                autopilot.hold()
+
+        if not already_alerted:
+            self._publish_alert(message, reason)
+        result = MissionExecutionResult(
+            status="FAILED",
+            success=False,
+            water_used_l=0.0,
+            reason=reason,
+        )
+        if task is not None:
+            self._publish_task_complete(task, result)
+        self.state.current_task = None
+        self.state.current_hotspot = None
+        self._clear_refill_state()
+        return result
 
     def handle_path_claim(
         self,
