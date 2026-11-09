@@ -494,7 +494,8 @@ export class World3D {
       m.group.position.copy(W(x, y, 0));
       const rad = Math.max(2.2, Math.sqrt(Math.max(area, 0.5) / Math.PI) + 1.6);
       m.ring.scale.setScalar(rad);
-      const color = status === 3 ? "#5cff9d" : status === 0 ? "#ffd166" : status === 4 ? "#888888" : "#ff5a36";
+      const color = status === 3 ? "#5cff9d" : status === 0 ? "#ffd166" : status === 4 ? "#888888"
+        : status === 5 ? "#b49cff" : status === 6 ? "#ffffff" : "#ff5a36";
       (m.ring.material as THREE.MeshBasicMaterial).color.set(color);
       (m.beam.material as THREE.MeshBasicMaterial).color.set(color);
       m.beam.visible = status !== 3;

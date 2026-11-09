@@ -38,7 +38,8 @@ export interface InitMsg {
 
 // [id, kind ("s"|"e"), x, y, z, yaw, water, status, isPlayer]
 export type DroneRow = [string, "s" | "e", number, number, number, number, number, string, boolean];
-// [id, x, y, area_m2, confidence, status(0 det,1 conf,2 assigned,3 suppressed,4 fp), litres still needed, priority 0..1]
+// [id, x, y, area_m2, confidence, status, litres still needed, priority 0..1]
+// status: 0 detected, 1 confirmed, 2 assigned, 3 suppressed, 4 false positive, 5 seeker investigating, 6 ground review
 export type HotspotRow = [string, number, number, number, number, number, number, number];
 
 export interface ThermalMsg {
@@ -72,6 +73,14 @@ export interface DemoStats {
   seekers: number;
   attackers: number;
   lakes: number;
+  investigated: number;
+  confirmed_investigate: number;
+  rejected_investigate: number;
+  reviews: number;
+  ground_fire: number;
+  ground_not_fire: number;
+  review_timeouts: number;
+  false_positives: number;
   coverage_pct?: number;
   fires_detected?: number;
   decoys_reported?: number;

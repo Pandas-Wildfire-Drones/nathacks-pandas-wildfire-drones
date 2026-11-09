@@ -209,7 +209,8 @@ export function drawMap(ctx: CanvasRenderingContext2D, size: number, opts: MapOp
     for (const [, x, y, area, conf, status] of store.hotspots) {
       const [px, py] = toCanvas(x, y, size, R);
       const r = Math.max(4, Math.sqrt(Math.max(area, 0.5) / Math.PI) * s * 2.2 + 3);
-      const col = status === 3 ? "#5cff9d" : status === 0 ? "#ffd166" : "#ff5a36";
+      const col = status === 3 ? "#5cff9d" : status === 0 ? "#ffd166" : status === 4 ? "#888888"
+        : status === 5 ? "#b49cff" : status === 6 ? "#ffffff" : "#ff5a36";
       ctx.fillStyle = col + "44";
       ctx.strokeStyle = col;
       ctx.lineWidth = 1.6;

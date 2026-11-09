@@ -2,13 +2,22 @@
 
 Inputs (subscriptions)                     Outputs (directed to drone/{id}/cmd unless noted)
   drone/*/hotspots   seeker + VERIFY reports   HotspotReport  target picture for the drone (sent before the task)
-  drone/*/heartbeat  where everyone is         TaskAssign     EXTINGUISH (volume_l) or REFILL (stand-by prefill)
-  swarm/tasks/complete                         RefillGrant    best refill point for the drone's current task
-  swarm/refill/requests
+  drone/*/heartbeat  where everyone is         TaskAssign     EXTINGUISH (volume_l), REFILL (stand-by prefill),
+  swarm/tasks/complete                                        INVESTIGATE (seeker close-range confirmation)
+  swarm/refill/requests                        RefillGrant    best refill point for the drone's current task
+  ground/commands    operator decisions
 
 Flow per fire:
-  1. seeker reports merge into one TrackedFire (merge radius); confidence >= confirm threshold -> CONFIRMED.
-     [STUB] the real flow confirms with a seeker INVESTIGATE pass (perception.confirm.HotspotConfirmer).
+  1. seeker reports merge into one TrackedFire (merge radius) as DETECTED.
+     CONFIRMATION (cfg.investigate): the nearest free seeker gets an INVESTIGATE task; it descends and runs
+     perception.confirm.HotspotConfirmer over several frames (precision-first threshold, mean probability):
+        CONFIRMED -> fire is real; FALSE_POSITIVE -> closed; inconclusive -> REVIEW: the seeker sends a ReviewReport
+        to the ground base and the leader waits for GroundCommand(CONFIRM_FIRE | MARK_FALSE_POSITIVE).
+     The swarm never depends on the ground link: no answer within review_timeout_s -> the leader confirms on its
+     own (recall-first, decision 0004: a missed fire costs more than a wasted drop). A human MARK_FALSE_POSITIVE or
+     CONFIRM_OUT always wins. With cfg.dispatch_on_detect, extinguishers may already fly to a DETECTED fire; their
+     drop is gated on the confirmation (the target picture they hold says DETECTED until the leader re-sends it).
+     (cfg.investigate = False keeps the old rule: confidence >= confirm threshold counts as CONFIRMED.)
   2. priority = core.priority.fire_priority (size x growth x temperature x confidence); the fire goes on a max-heap.
   3. every tick, idle extinguishers are handed out by core.allocation.allocate: highest priority first, each slot
      to the drone with the lowest refill-aware ETA (drone -> best refill point -> fire).
@@ -27,7 +36,10 @@ from dataclasses import dataclass, field
 from contracts import (
     SUB_ALL_HEARTBEATS,
     SUB_ALL_HOTSPOTS,
+    SUB_GROUND_COMMANDS,
+    CommandKind,
     DroneKind,
+    GroundCommand,
     Hotspot,
     HotspotReport,
     HotspotStatus,
@@ -57,7 +69,7 @@ from core.allocation import (
 )
 from core.priority import PriorityParams, fire_priority, normalized_priority
 
-__all__ = ["ExtState", "LeaderConfig", "SwarmLeader", "TrackedFire"]
+__all__ = ["ExtState", "LeaderConfig", "SeekerState", "SwarmLeader", "TrackedFire"]
 
 _GOLDEN = math.pi * (3.0 - math.sqrt(5.0))
 
@@ -81,6 +93,11 @@ class LeaderConfig:
     tick_s: float = 0.5
     fire_time_scale: float = 1.0        # [GAME-SCALE] sim seconds run this many fire seconds (growth units)
     priority: PriorityParams = field(default_factory=PriorityParams)
+    # --- confirmation --------------------------------------------------------------------------------------------
+    investigate: bool = True            # a seeker INVESTIGATE pass decides CONFIRMED (False: confidence rule)
+    dispatch_on_detect: bool = False    # extinguishers may fly to DETECTED fires; the drop waits for confirmation
+    investigate_timeout_s: float = 45.0  # investigator silent this long -> re-assign
+    review_timeout_s: float = 20.0      # no ground decision by then -> confirm autonomously (recall-first)
 
 
 @dataclass
@@ -98,6 +115,12 @@ class TrackedFire:
     drops: int = 0
     reopened: int = 0
     sources: set[str] = field(default_factory=set)
+    investigator: str | None = None     # seeker running the INVESTIGATE task
+    investigate_task: str | None = None
+    investigate_since: float = -1.0
+    review_since: float | None = None   # inconclusive close-range look: waiting for the ground base
+    close_range: Hotspot | None = None  # the investigating seeker's report (position / area / mean p)
+    confirmed_by: str | None = None     # "investigate" | "ground" | "timeout" | "detector"
 
     @property
     def hotspot_id(self) -> str:
@@ -117,6 +140,13 @@ class ExtState:
     drone_id: str
     position: Position
     water_l: float
+    hb_task: str | None = None
+
+
+@dataclass
+class SeekerState:
+    drone_id: str
+    position: Position
     hb_task: str | None = None
 
 
@@ -142,6 +172,9 @@ class SwarmLeader:
         self._alias: dict[str, str] = {}
         self.ext: dict[str, ExtState] = {}
         self.seekers: set[str] = set()
+        self.seeker_state: dict[str, SeekerState] = {}
+        self.investigations: dict[str, str] = {}      # INVESTIGATE task id -> fire id
+        self.scouting = False                         # investigations run (seek phase) even before `active`
         self.assignments: dict[str, _Assignment] = {}
         self.standby: dict[str, str] = {}             # drone -> prefill / staging REFILL task id
         self.staged: dict[str, str] = {}              # drone -> refill point it waits at (until its next task)
@@ -156,6 +189,7 @@ class SwarmLeader:
         bus.subscribe(SUB_ALL_HEARTBEATS, self._on_heartbeat)
         bus.subscribe(ROUTES[MessageType.TASK_COMPLETE], self._on_complete)
         bus.subscribe(ROUTES[MessageType.REFILL_REQUEST], self._on_refill)
+        bus.subscribe(SUB_GROUND_COMMANDS, self._on_ground)
 
     @property
     def useful_l(self) -> float:
@@ -176,9 +210,14 @@ class SwarmLeader:
         else:
             self.queue.discard(f.hotspot_id)
 
+    def _confirmed(self, f: TrackedFire) -> bool:
+        return f.hotspot.status in (HotspotStatus.CONFIRMED, HotspotStatus.ASSIGNED)
+
     def _assignable(self, f: TrackedFire, now: float | None = None) -> bool:
         now = self.clock.now() if now is None else now
-        if f.hotspot.status not in (HotspotStatus.CONFIRMED, HotspotStatus.ASSIGNED) or f.remaining_l <= 0:
+        ok = self._confirmed(f) or (self.cfg.investigate and self.cfg.dispatch_on_detect
+                                    and f.hotspot.status is HotspotStatus.DETECTED)
+        if not ok or f.remaining_l <= 0:
             return False
         if self.cfg.max_per_fire <= 1 and (f.inflight or f.verify_until >= now):
             return False   # one drone at a time: identical goals make CBS replan endlessly; wait for its VERIFY
@@ -204,6 +243,11 @@ class SwarmLeader:
         if msg.sender_id in self.ext and h.hotspot_id in self.hotspots:
             self._on_verify(msg.sender_id, h)
             return
+        f0 = self.hotspots.get(h.hotspot_id)
+        # the investigating seeker's close-range report (status != DETECTED: its tracker reports are always DETECTED)
+        if f0 is not None and f0.investigator == msg.sender_id and h.status is not HotspotStatus.DETECTED:
+            f0.close_range = h            # the verdict itself arrives with the INVESTIGATE TaskComplete
+            return
         self.seekers.add(msg.sender_id)
         now = self.clock.now()
         key = self._alias.get(h.hotspot_id)
@@ -215,21 +259,27 @@ class SwarmLeader:
                     break
         if key is None:
             key = h.hotspot_id
-            status = HotspotStatus.CONFIRMED if h.confidence >= self.cfg.confirm_threshold else HotspotStatus.DETECTED
+            status = (HotspotStatus.CONFIRMED if not self.cfg.investigate and h.confidence >= self.cfg.confirm_threshold
+                      else HotspotStatus.DETECTED)
             f = TrackedFire(h.model_copy(update={"status": status, "position": Position(x=h.position.x,
                                                                                         y=h.position.y, z=0.0)}),
                             self._need(h.est_area_m2))
             self.hotspots[key] = f
             if status is HotspotStatus.CONFIRMED:
                 self.stats["confirmed"] += 1
+                f.confirmed_by = "detector"
         else:
             f = self.hotspots[key]
             old = f.hotspot
             conf = max(old.confidence, h.confidence)
             status = old.status
-            if status is HotspotStatus.DETECTED and conf >= self.cfg.confirm_threshold:
+            if status in (HotspotStatus.FALSE_POSITIVE, HotspotStatus.VERIFIED_OUT):
+                self._alias[h.hotspot_id] = key       # closed (rejected / declared out): don't re-open it
+                return
+            if not self.cfg.investigate and status is HotspotStatus.DETECTED and conf >= self.cfg.confirm_threshold:
                 status = HotspotStatus.CONFIRMED
                 self.stats["confirmed"] += 1
+                f.confirmed_by = "detector"
             if (status is HotspotStatus.SUPPRESSED and h.confidence >= self.cfg.confirm_threshold
                     and f.suppressed_at is not None and h.last_seen > f.suppressed_at + 10.0):
                 status = HotspotStatus.CONFIRMED            # rekindled: a seeker sees heat again
@@ -279,9 +329,116 @@ class SwarmLeader:
         f.need_l = f.delivered_l + f.reserved_l + self._need(h.est_area_m2)
         self._reprioritise(f)                                # back on the heap, same formula
 
+    # ---- confirmation ------------------------------------------------------------------------------------------
+    def _confirm(self, f: TrackedFire, by: str) -> None:
+        if f.hotspot.status is not HotspotStatus.DETECTED:
+            return
+        upd = {"status": HotspotStatus.CONFIRMED}
+        cr = f.close_range
+        if cr is not None:
+            upd.update(position=Position(x=cr.position.x, y=cr.position.y, z=0.0),
+                       est_area_m2=max(cr.est_area_m2, f.hotspot.est_area_m2) if cr.est_area_m2 else
+                       f.hotspot.est_area_m2, confidence=max(cr.confidence, f.hotspot.confidence))
+        f.hotspot = f.hotspot.model_copy(update=upd)
+        f.review_since = None
+        f.confirmed_by = by
+        self.stats["confirmed"] += 1
+        self.stats[f"confirmed_{by}"] += 1
+        if f.delivered_l == 0:
+            f.need_l = max(f.need_l, self._need(f.hotspot.est_area_m2))
+        if f.inflight:                                         # dispatched on detection: clear their drop
+            f.hotspot = f.hotspot.model_copy(update={"status": HotspotStatus.ASSIGNED})
+            for d in f.inflight:
+                h = f.hotspot.model_copy(update={"assigned_to": d})
+                self._send(HotspotReport(hotspot=h), receiver=d, topic=sub_my_commands(d))
+        self.log(f"{f.hotspot_id}: CONFIRMED ({by})")
+        self._reprioritise(f)
+
+    def _reject(self, f: TrackedFire, by: str) -> None:
+        if f.hotspot.status is HotspotStatus.FALSE_POSITIVE:
+            return
+        for d in list(f.inflight):                             # recall anyone already on the way
+            self._release(d, delivered=0.0)
+            self.staged.pop(d, None)
+        f.hotspot = f.hotspot.model_copy(update={"status": HotspotStatus.FALSE_POSITIVE, "assigned_to": None})
+        f.review_since = None
+        self.queue.discard(f.hotspot_id)
+        self.stats["false_positive"] += 1
+        self.stats[f"false_positive_{by}"] += 1
+        self.log(f"{f.hotspot_id}: FALSE POSITIVE ({by})")
+
+    def _on_investigated(self, f: TrackedFire, b: TaskComplete) -> None:
+        f.investigator, f.investigate_task = None, None
+        self.stats["investigated"] += 1
+        if b.result_status is HotspotStatus.CONFIRMED:
+            self._confirm(f, "investigate")
+        elif b.result_status is HotspotStatus.FALSE_POSITIVE:
+            self._reject(f, "investigate")
+        elif f.hotspot.status is HotspotStatus.DETECTED:     # inconclusive: the seeker escalated to the ground
+            f.review_since = self.clock.now()
+            self.stats["review"] += 1
+            self.log(f"{f.hotspot_id}: inconclusive at close range, waiting for the ground base")
+
+    def _on_ground(self, msg: SwarmMessage) -> None:
+        g = msg.body
+        if not isinstance(g, GroundCommand) or g.target_id is None:
+            return
+        fid = self._alias.get(g.target_id, g.target_id)
+        f = self.hotspots.get(fid)
+        if f is None:
+            return
+        if g.command is CommandKind.CONFIRM_FIRE:
+            self.stats["ground_fire"] += 1
+            self._confirm(f, "ground")
+        elif g.command is CommandKind.MARK_FALSE_POSITIVE:
+            self.stats["ground_not_fire"] += 1
+            self._reject(f, "ground")
+        elif g.command is CommandKind.CONFIRM_OUT:           # humans declare fires out (hard rule 10)
+            for d in list(f.inflight):
+                self._release(d, delivered=0.0)
+            f.hotspot = f.hotspot.model_copy(update={"status": HotspotStatus.VERIFIED_OUT, "assigned_to": None})
+            self.queue.discard(fid)
+
+    def _assign_investigations(self, now: float) -> None:
+        for f in self.hotspots.values():                      # timeouts first
+            if f.investigator is not None and now - f.investigate_since > self.cfg.investigate_timeout_s:
+                self.investigations.pop(f.investigate_task, None)
+                f.investigator, f.investigate_task = None, None
+                self.stats["investigate_timeout"] += 1
+            if (f.review_since is not None and f.hotspot.status is HotspotStatus.DETECTED
+                    and now - f.review_since > self.cfg.review_timeout_s):
+                self.stats["review_timeout"] += 1
+                self._confirm(f, "timeout")
+        busy = {f.investigator for f in self.hotspots.values() if f.investigator}
+        free = [s for s in self.seeker_state.values() if s.drone_id not in busy
+                and not (s.hb_task or "").startswith(f"{self.id}-")]
+        todo = sorted((f for f in self.hotspots.values() if f.hotspot.status is HotspotStatus.DETECTED
+                       and f.investigator is None and f.review_since is None), key=lambda f: -f.priority)
+        for f in todo:
+            if not free:
+                return
+            p = f.hotspot.position
+            s = min(free, key=lambda s: (math.hypot(s.position.x - p.x, s.position.y - p.y), s.drone_id))
+            free.remove(s)
+            self.n_tasks += 1
+            task = Task(task_id=f"{self.id}-T{self.n_tasks}", type=TaskType.INVESTIGATE,
+                        priority=round(f.priority, 4), status=TaskStatus.ASSIGNED, assigned_to=s.drone_id,
+                        target_hotspot_id=f.hotspot_id, created_at=now, epoch=self.epoch)
+            self._send(HotspotReport(hotspot=f.hotspot), receiver=s.drone_id, topic=sub_my_commands(s.drone_id))
+            self._send(TaskAssign(task=task, epoch=self.epoch), receiver=s.drone_id)
+            f.investigator, f.investigate_task, f.investigate_since = s.drone_id, task.task_id, now
+            self.investigations[task.task_id] = f.hotspot_id
+            self.stats["investigate_tasks"] += 1
+
     # ---- drones --------------------------------------------------------------------------------------------------
     def _on_heartbeat(self, msg: SwarmMessage) -> None:
         s = msg.body.state
+        if s.kind is DroneKind.SEEKER:
+            st = self.seeker_state.get(s.drone_id)
+            if st is None:
+                st = self.seeker_state[s.drone_id] = SeekerState(s.drone_id, s.position)
+            st.position, st.hb_task = s.position, s.current_task_id
+            return
         if s.kind is not DroneKind.EXTINGUISHER:
             return
         e = self.ext.get(s.drone_id)
@@ -303,6 +460,11 @@ class SwarmLeader:
 
     def _on_complete(self, msg: SwarmMessage) -> None:
         b: TaskComplete = msg.body
+        fid = self.investigations.pop(b.task_id, None)
+        if fid is not None:
+            if fid in self.hotspots and self.hotspots[fid].investigate_task == b.task_id:
+                self._on_investigated(self.hotspots[fid], b)
+            return
         if self.standby.get(b.drone_id) == b.task_id:
             self.standby.pop(b.drone_id, None)
             return
@@ -367,13 +529,15 @@ class SwarmLeader:
         task = Task(task_id=f"{self.id}-T{self.n_tasks}", type=TaskType.EXTINGUISH, priority=round(f.priority, 4),
                     status=TaskStatus.ASSIGNED, assigned_to=a.drone_id, target_hotspot_id=a.fire_id,
                     created_at=now, epoch=self.epoch, volume_l=max(a.volume_l, 1.0))
-        h = f.hotspot.model_copy(update={"status": HotspotStatus.ASSIGNED, "assigned_to": a.drone_id,
-                                         "position": self._aim(f)})
+        confirmed = self._confirmed(f)
+        h = f.hotspot.model_copy(update={"status": HotspotStatus.ASSIGNED if confirmed else HotspotStatus.DETECTED,
+                                         "assigned_to": a.drone_id, "position": self._aim(f)})
         # executors learn the target only from a HotspotReport, so send it first (same topic, in order)
         self._send(HotspotReport(hotspot=h), receiver=a.drone_id, topic=sub_my_commands(a.drone_id))
         self._send(TaskAssign(task=task, epoch=self.epoch), receiver=a.drone_id)
         f.inflight[a.drone_id] = task.volume_l
-        f.hotspot = f.hotspot.model_copy(update={"status": HotspotStatus.ASSIGNED, "assigned_to": a.drone_id})
+        if confirmed:
+            f.hotspot = f.hotspot.model_copy(update={"status": HotspotStatus.ASSIGNED, "assigned_to": a.drone_id})
         self.assignments[a.drone_id] = _Assignment(task, a.fire_id, task.volume_l, now, a.eta_s, a.refill)
         self.standby.pop(a.drone_id, None)
         self.staged.pop(a.drone_id, None)
@@ -423,9 +587,13 @@ class SwarmLeader:
         return fires, idle
 
     def tick(self, now: float) -> None:
-        if not self.active or now - self.last_tick < self.cfg.tick_s:
+        if not (self.active or self.scouting) or now - self.last_tick < self.cfg.tick_s:
             return
         self.last_tick = now
+        if self.cfg.investigate:
+            self._assign_investigations(now)
+        if not self.active:
+            return
         for fid, f in self.hotspots.items():      # fires whose VERIFY window just expired rejoin the heap
             if fid not in self.queue and self._assignable(f, now):
                 self.queue.push(fid, f.priority)

@@ -28,6 +28,19 @@ DEMO_PHASES = ("DEMO", "SCORE")
 _STATUS = {HotspotStatus.DETECTED: 0, HotspotStatus.CONFIRMED: 1, HotspotStatus.ASSIGNED: 2,
            HotspotStatus.SUPPRESSED: 3, HotspotStatus.FALSE_POSITIVE: 4, HotspotStatus.VERIFIED_OUT: 3}
 
+
+
+def _ui_status(t) -> int:
+    """Client status code: 0 detected, 1 confirmed, 2 assigned, 3 suppressed, 4 false positive,
+    5 being investigated by a seeker, 6 waiting for the ground base (inconclusive close-range look)."""
+    if t.hotspot.status is HotspotStatus.DETECTED:
+        if getattr(t, "investigator", None):
+            return 5
+        if getattr(t, "review_since", None) is not None:
+            return 6
+    return _STATUS.get(t.hotspot.status, 0)
+
+
 _EXECUTOR: ThreadPoolExecutor | None = None
 
 
@@ -213,6 +226,12 @@ class Session:
             "queue": len(ld.queue_view(999)), "tasks": ld.n_tasks,
             "water_dropped_l": round(w.stats["dropped_l"]), "water_on_fire_l": round(w.stats["on_fire_l"]),
             "seekers": len(w.seekers), "attackers": len(w.attackers), "lakes": len(w.water_sources),
+            "investigated": int(ld.stats["investigated"]),
+            "confirmed_investigate": int(ld.stats["confirmed_investigate"]),
+            "rejected_investigate": int(ld.stats["false_positive_investigate"]),
+            "reviews": int(ld.stats["review"]), "ground_fire": int(ld.stats["ground_fire"]),
+            "ground_not_fire": int(ld.stats["ground_not_fire"]), "review_timeouts": int(ld.stats["review_timeout"]),
+            "false_positives": int(ld.stats["false_positive"]),
         }
         if final:
             fires, decoys = self._detected(w)
@@ -228,7 +247,8 @@ class Session:
             n = sum(1 for t in (w.leader.hotspots.values() if w.leader else []) if s.id in t.sources)
             what = (f"Lawnmower over zone {z.zone_id} (pass {s.passes + 1}) at {s.ap.z:.0f} m"
                     if s.searching and z is not None else "Returning to base")
-            out[s.id] = f"{what} · {n} hotspots reported"
+            act = s.activity() if hasattr(s, "activity") else ""
+            out[s.id] = act or f"{what} · {n} hotspots reported"
         for a in w.attackers:
             out[a.id] = a.activity()
         return out
@@ -292,7 +312,7 @@ class Session:
         if w.leader is None:
             return []
         return [[t.hotspot_id, round(t.hotspot.position.x, 1), round(t.hotspot.position.y, 1),
-                 round(t.hotspot.est_area_m2, 1), round(t.hotspot.confidence, 2), _STATUS.get(t.hotspot.status, 0),
+                 round(t.hotspot.est_area_m2, 1), round(t.hotspot.confidence, 2), _ui_status(t),
                  round(max(t.remaining_l, 0)), round(getattr(t, "priority", 0.0), 3)]
                 for t in w.leader.hotspots.values()]
 

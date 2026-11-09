@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.7` · `contract_version: 0.3.1` · last updated 2026-11-09
+`context_version: 0.3.8` · `contract_version: 0.3.2` · last updated 2026-11-09
 
 ---
 
@@ -415,7 +415,7 @@ __all__ = ["CONTRACT_VERSION", "Contract", "FrozenContract", "Seconds"]
 
 # Bump when a field is renamed/removed or semantics change. Add a line to the
 # changelog in context.md. Messages carry this in `SwarmMessage.v`.
-CONTRACT_VERSION = "0.3.1"
+CONTRACT_VERSION = "0.3.2"
 
 # All timestamps/durations are float SECONDS in the Clock's timebase
 # (sim time in the simulator, wall-clock epoch seconds on real hardware).
@@ -434,7 +434,7 @@ class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 ```
 
-#### `contracts/enums.py` (171 lines)
+#### `contracts/enums.py` (172 lines)
 
 ```python
 """Enumerations shared by every workstream.
@@ -594,6 +594,7 @@ class CommandKind(StrEnum):
     RESUME = "RESUME"
     ABORT_TASK = "ABORT_TASK"
     SET_PRIORITY = "SET_PRIORITY"                # params: {"priority": 0..1}; target_id = hotspot_id
+    CONFIRM_FIRE = "CONFIRM_FIRE"                # human confirms a REVIEW candidate is a fire -> CONFIRMED
     CONFIRM_OUT = "CONFIRM_OUT"                  # human declares hotspot out -> VERIFIED_OUT
     MARK_FALSE_POSITIVE = "MARK_FALSE_POSITIVE"  # human rejects a hotspot
     ENABLE_WATER_SOURCE = "ENABLE_WATER_SOURCE"
@@ -2019,6 +2020,7 @@ def example_scenario() -> ScenarioConfig:
 
 | Date | By | Change | Why |
 |---|---|---|---|
+| 2026-11-09 | sim chat (confirmation) | v0.3.8 / contracts 0.3.2: `CommandKind.CONFIRM_FIRE` (additive); close-range confirmation replaces the confidence stub for the swarm: leader sends INVESTIGATE to the nearest free seeker, seeker runs `perception.confirm.HotspotConfirmer` at 80 m (search radius sized to the fire, 6-10 m; nothing seen = escalate, never reject), inconclusive -> `ReviewReport` -> `GroundReviewQueue(publish_decisions=True)` -> `GroundCommand(CONFIRM_FIRE / MARK_FALSE_POSITIVE)`; no answer in 20 s -> leader confirms autonomously; DEMO dispatches on detection with a drop gate (`sim/attacker.py` HOLD); `sim/ground.py` simulated operator 70 % fire / 30 % not fire; attackers already heading to a stand-by top-up now re-ask for the minimum-detour refill point; `tests/core/test_confirmation.py` | team ask: replace the confirmation stub, wire ground review without depending on it |
 | 2026-11-09 | sim chat (DEMO mode) | v0.3.7: swarm brain in `core/` (fire priority = confidence × projected area × heat weight; max-heap queue; refill-aware ETA allocation drone → best refill point → fire; VERIFY-hot re-queue; equal-time column × band seeker zones; idle drones pre-position at refill points) replaces `sim/brain_stub` for the swarm; sim: bigger arena (r 220 m, 20 drones), DEMO mode (r 450 m, 8 seekers + 40 field-refill attackers ~15 L foam, 6 lakes as `WaterSource` refill points vs dry basins on the same layout, 2 min, auto camera), `sim/attacker.py`, lakes in `static.py`, pause / mouse / orbit fixes in `frontend/`; `tests/core/` + `tests/sim/test_demo.py`; package `core*`; no contract changes (staging uses `Task(REFILL)` + `target_*_id`). Details: `sim/README.md` | team ask: solve the stubbed swarm brain, refills from lakes, cluster-scale demo |
 | 2026-11-08 | sim chat (integration) | v0.3.6: added `sim/` (Python game/sim server: FLAME 3 NADIR thermal maps, fire CA, thermal renderer, SimBus, SimAutopilot/SimPayload, real perception + autonomy in the loop, swarm-brain STUBS in `sim/brain_stub.py`, shadow-run scoring) and `frontend/` (three.js + TS game client, pnpm); `tests/sim/` (6 tests); `pyproject` extra `[sim]`, packages `autonomy*`/`sim*`; no contract changes. Details: `sim/README.md`, `exclude/simulator_task.md` | demo: human + bots vs autonomous swarm on the same seed |
 | 2026-11-08 | perception / ground-base integration | v0.3.6 / contracts 0.3.1: add reliable `REVIEW_REPORT` routing to `ground/reviews`, wire tracked-hotspot triage through `PerceptionReporter`, and add a deduplicating ground-base review queue | Ensure REVIEW-band candidates reach an operator queue |

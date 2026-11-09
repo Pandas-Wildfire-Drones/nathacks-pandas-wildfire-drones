@@ -137,6 +137,17 @@ class GameConfig:
     stage_idle: bool = False
     agent_mult: float = 1.0                # water-equivalent of 1 L of the loaded agent (contracts AgentSpec)
 
+    # --- confirmation (close-range INVESTIGATE pass + ground review) ----------------------------------------------
+    investigate: bool = True               # a seeker confirms each detection up close before water is committed
+    investigate_agl_m: float = 80.0        # confirm height: 7.2 cm/px = the CNN's reference GSD (PatchSpec)
+    investigate_hz: float = 4.0            # frames per second while hovering
+    investigate_max_frames: int = 12       # then inconclusive -> ground review (module default 45; sim budget)
+    dispatch_on_detect: bool = False       # extinguishers fly to DETECTED fires, drop only once confirmed
+    ground_link: bool = True               # simulated ground operator answers review requests
+    ground_approve_frac: float = 0.7       # team spec: 70 % of reviews approved as fire, 30 % rejected
+    ground_delay_s: float = 6.0            # operator decision time [ASSUMPTION]
+    review_timeout_s: float = 20.0         # no ground answer -> leader confirms autonomously (recall-first)
+
     # --- DEMO mode -------------------------------------------------------------------------------------------------
     demo: bool = False
     demo_s: float = 120.0                  # seekers and extinguishers run together for this long
@@ -192,7 +203,7 @@ def demo_config(wet: bool = True, **over) -> GameConfig:
         demo=True, arena_radius_m=450.0, base_xy=(0.0, -420.0), world_res_m=0.3, map_cell_m=3.0,
         n_trees=2200, fire_clusters=6, cluster_r_m=60.0, n_lakes=6, lake_r_m=(25.0, 50.0), lakes_wet=wet,
         fires=DEMO_FIRE_TYPES, decoys=DEMO_DECOY_TYPES, fire_time_scale=3.0, perception_hz=1.5,
-        demo_seekers=8, n_extinguishers=40, loop_search=True, max_per_fire=6, prefill_idle=True, stage_idle=True,
+        demo_seekers=8, n_extinguishers=40, loop_search=True, max_per_fire=6, prefill_idle=True, stage_idle=True, dispatch_on_detect=True,
         transit_agl_m=30.0, vertical_speed_mps=8.0,
         agent_mult=DEFAULT_AGENT_SPECS[ExtinguishingAgent.CLASS_A_FOAM].water_equiv_multiplier,
         hotspot_volume_margin=3.5, min_task_volume_l=10.0, extinguisher_spec=attacker_spec(),

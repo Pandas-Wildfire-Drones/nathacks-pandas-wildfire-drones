@@ -254,6 +254,8 @@ export class Screens {
           <tr><td>Drops (≈15 L foam each)</td><td>${d.drops}</td></tr>
           <tr><td>Refills at lakes / at base</td><td>${d.fills_lake} / ${d.fills_base}${fills ? ` (${((100 * d.fills_lake) / fills).toFixed(0)}% lakes)` : ""}</td></tr>
           <tr><td>VERIFY: suppressed / still hot → back on the heap</td><td>${d.suppressed} / ${d.verify_hot}</td></tr>
+          <tr><td>Close-range confirmations (seeker INVESTIGATE)</td><td>${d.investigated}: ${d.confirmed_investigate} fire, ${d.rejected_investigate} rejected</td></tr>
+          <tr><td>Sent to ground review → operator fire / not fire / no answer</td><td>${d.reviews} → ${d.ground_fire} / ${d.ground_not_fire} / ${d.review_timeouts}</td></tr>
           <tr><td>Foam dropped / landing on fire</td><td>${d.water_dropped_l} L / ${d.water_on_fire_l} L</td></tr>
         </table>
         <p class="muted small">${wet ? "Lakes on: attackers refill at whichever point (lake or base) gives the shortest drone → refill → fire trip." : "No lakes (dry basins): every refill is a trip to the base, so the allocator degrades to highest-priority-first."} Same fires, seeds and perception on both variants — run the other one to compare.</p>

@@ -149,6 +149,7 @@ class _Bed:
     """A leader with fake extinguishers that just record their commands."""
 
     def __init__(self, drones: dict[str, tuple[float, float, float]], points, **cfg):
+        cfg.setdefault("investigate", False)        # allocation tests: confidence rule (confirmation has own tests)
         self.clock = SimClock()
         self.bus = SimBus(self.clock, latency_s=0.0)
         self.leader = SwarmLeader("leader", self.bus, self.clock, LeaderConfig(confirm_threshold=0.8, capacity_l=15.0,

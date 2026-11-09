@@ -30,6 +30,7 @@ from sim.brain_stub import DummyRefillAssigner
 from sim.bots import HumanCommander
 from sim.bus import SimBus, SimClock
 from sim.config import GameConfig
+from sim.ground import SimGroundOperator
 from sim.fire import FireModel
 from sim.static import WorldStatic
 from sim.vehicles import DwellZone, SimAutopilot, SimPayload
@@ -61,6 +62,7 @@ class World:
         self.leader = None
         self.attackers: list[AttackerAgent] = []
         self.zones: dict = {}
+        self.ground: SimGroundOperator | None = None
         self.drops: deque = deque(maxlen=64)
         self.drop_seq = 0
         self.log: deque = deque(maxlen=40)
@@ -130,9 +132,16 @@ class World:
         else:
             self.leader = SwarmLeader("leader", self.bus, self.clock, self._leader_cfg(), self.refill_points(),
                                       log=self.log.append)
+            self._add_ground()
         self.bus.subscribe(SUB_GROUND_ALERTS, self._on_alert)
 
     # ------------------------------------------------------------------------------------------------------------
+    def _add_ground(self) -> None:
+        cfg = self.cfg
+        if cfg.investigate and cfg.ground_link:
+            self.ground = SimGroundOperator(self.bus, self.clock, cfg.ground_approve_frac, cfg.ground_delay_s,
+                                            seed=self.static.seed)
+
     def _leader_cfg(self) -> LeaderConfig:
         cfg, espec = self.cfg, self.cfg.extinguisher_spec
         return LeaderConfig(
@@ -141,7 +150,9 @@ class World:
             margin=cfg.hotspot_volume_margin, min_volume_l=cfg.min_task_volume_l,
             min_useful_l=min(20.0, 0.9 * espec.water_capacity_l), max_per_fire=cfg.max_per_fire,
             geofence_radius_m=cfg.arena_radius_m - 4.0, prefill_idle=cfg.prefill_idle, stage_idle=cfg.stage_idle,
-            fire_time_scale=cfg.fire_time_scale, verify_timeout_s=8.0 if not cfg.demo else 4.0)
+            fire_time_scale=cfg.fire_time_scale, verify_timeout_s=8.0 if not cfg.demo else 4.0,
+            investigate=cfg.investigate, dispatch_on_detect=cfg.dispatch_on_detect,
+            review_timeout_s=cfg.review_timeout_s)
 
     def refill_points(self) -> list[RefillPoint]:
         fill_s = self.cfg.attacker_fill_s if self.cfg.demo else self.cfg.refill_dwell_s
@@ -181,6 +192,7 @@ class World:
             self.attackers.append(AttackerAgent(eid, i, self, ap, payload, names))
         self.leader = SwarmLeader("leader", self.bus, self.clock, self._leader_cfg(), self.refill_points(),
                                   log=self.log.append)
+        self._add_ground()
         self.bus.subscribe(SUB_GROUND_ALERTS, self._on_alert)
 
     # ------------------------------------------------------------------------------------------------------------
@@ -210,6 +222,8 @@ class World:
     def begin_seek(self) -> None:
         cfg = self.cfg
         if self.kind in ("swarm", "demo"):
+            if isinstance(self.leader, SwarmLeader):
+                self.leader.scouting = True       # INVESTIGATE tasks run during the search phase too
             spacing = cfg.seeker_spec.thermal.camera.swath_m(cfg.lawnmower_agl_m) * (1.0 - cfg.lawnmower_overlap)
             zones = EqualTimeZoneAllocator(spacing, self.base).allocate(cfg.arena_radius_m,
                                                                         [s.id for s in self.seekers])
@@ -251,6 +265,8 @@ class World:
             self.player_ext.tick(now, dt, self.apply_water)
         if self.leader is not None:
             self.leader.tick(now)
+        if self.ground is not None:
+            self.ground.tick(now)
         while now >= self.next_fire_t - 1e-9:
             self.fire.step(self.cfg.fire_step_s * self.cfg.fire_time_scale)
             self.next_fire_t += self.cfg.fire_step_s

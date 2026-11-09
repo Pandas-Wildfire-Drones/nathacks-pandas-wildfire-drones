@@ -1,11 +1,28 @@
-"""In-memory ground-base queue for perception candidates requiring human review."""
+"""In-memory ground-base queue for perception candidates requiring human review.
+
+Decision delivery (opt-in, `publish_decisions=True`): resolving a review publishes a GroundCommand on
+`ground/commands`, which the swarm leader consumes:
+    FIRE      -> CONFIRM_FIRE          (target_id = the candidate's hotspot id)
+    NOT_FIRE  -> MARK_FALSE_POSITIVE
+    REVISIT   -> nothing (the leader keeps its own autonomous timeout; ask a seeker to look again)
+The swarm never WAITS for this: if no decision arrives in time the leader decides on its own (hard rule 4 spirit:
+the ground link is a bonus, not a dependency).
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Callable
 
-from contracts import Bus, ReviewReport, SUB_GROUND_REVIEWS, SwarmMessage
+from contracts import (
+    SUB_GROUND_REVIEWS,
+    Bus,
+    CommandKind,
+    GroundCommand,
+    ReviewReport,
+    SwarmMessage,
+    topic_for,
+)
 
 __all__ = ["ReviewDisposition", "ReviewRecord", "GroundReviewQueue"]
 
@@ -27,8 +44,13 @@ class ReviewRecord:
 class GroundReviewQueue:
     """Subscribe to ground review reports, deduplicate by review ID, and track operator decisions."""
 
-    def __init__(self, bus: Bus, now: Callable[[], float]):
+    def __init__(self, bus: Bus, now: Callable[[], float], publish_decisions: bool = False,
+                 sender_id: str = "ground"):
         self._now = now
+        self._bus = bus
+        self.publish_decisions = publish_decisions
+        self.sender_id = sender_id
+        self._seq = 0
         self._pending: dict[str, ReviewRecord] = {}
         self._resolved: dict[str, ReviewRecord] = {}
         self.expired_reports = 0
@@ -75,7 +97,20 @@ class GroundReviewQueue:
             disposition=disposition,
         )
         self._resolved[review_id] = resolved
+        if self.publish_decisions:
+            self._deliver(resolved)
         return resolved
+
+    def _deliver(self, record: ReviewRecord) -> None:
+        kind = {ReviewDisposition.FIRE: CommandKind.CONFIRM_FIRE,
+                ReviewDisposition.NOT_FIRE: CommandKind.MARK_FALSE_POSITIVE}.get(record.disposition)
+        if kind is None:
+            return
+        body = GroundCommand(command=kind, target_id=record.report.hotspot.hotspot_id,
+                             params={"review_id": record.report.review_id}, issued_by=self.sender_id)
+        self._seq += 1
+        msg = SwarmMessage.create(self.sender_id, body, self._now(), seq=self._seq)
+        self._bus.publish(topic_for(msg), msg)
 
     def resolved(self) -> list[ReviewRecord]:
         return list(self._resolved.values())

@@ -3,6 +3,9 @@
 SeekerAgent        flies a lawnmower (autonomy.coverage_search) or follows the player's pose; every camera tick it
                    renders a ThermalFrame and runs perception.pipeline.SeekerPerception (FUSED: threshold + CNN)
                    in a worker thread; hotspots are published as HotspotReport after a fixed latency.
+                   INVESTIGATE tasks from the leader interrupt the lawnmower: the seeker descends over the candidate,
+                   runs perception.confirm.HotspotConfirmer on close-range frames, reports the verdict (and a
+                   ReviewReport to the ground base when inconclusive), then resumes where it left off.
 ExtinguisherAgent  autonomy.swarm_adapter.SwarmAutonomyAdapter + DroneController (+ MissionCoordinator/CBS,
                    water-drop gate, refill) on a SimAutopilot / SimPayload.
 PlayerExtinguisher the human's extinguisher: pose from the client, water released while Space is held.
@@ -12,7 +15,7 @@ from __future__ import annotations
 import math
 import zlib
 from concurrent.futures import Executor, Future
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 from scipy import ndimage
@@ -23,10 +26,11 @@ from autonomy.swarm_adapter import SwarmAutonomyAdapter
 from autonomy.water_drop import WaterDropLimits
 from autonomy.coverage_search import generate_coverage_waypoints
 from contracts import (
-    CameraModel, DroneKind, DroneState, DroneStatus, ExtinguishingAgent, GridSpec, Heartbeat, HotspotReport,
-    HotspotStatus, Pose, Position, Powertrain, RefillStation, SwarmMessage, SwarmRole, ThermalFrame, Zone, topic_for,
+    CameraModel, DroneKind, DroneState, DroneStatus, ExtinguishingAgent, GridSpec, Heartbeat, Hotspot, HotspotReport,
+    HotspotStatus, Pose, Position, Powertrain, RefillStation, ReviewReport, SwarmMessage, SwarmRole, TaskAssign,
+    TaskComplete, TaskType, ThermalFrame, Zone, sub_my_commands, topic_for,
 )
-from perception.confirm import SuppressionChecker
+from perception.confirm import HotspotConfirmer, SuppressionChecker
 from perception.frame_context import FrameContext
 from perception.pipeline import SeekerPerception
 from sim import thermal
@@ -61,6 +65,16 @@ class _Pending:
     timestamp: float
 
 
+@dataclass
+class _Investigation:
+    task_id: str
+    target: Hotspot
+    confirmer: HotspotConfirmer
+    next_t: float = 0.0
+    looking: bool = False
+    frames: int = 0
+
+
 class SeekerAgent:
     def __init__(self, drone_id: str, world, autopilot: SimAutopilot, perception: SeekerPerception,
                  executor: Executor, player: bool = False):
@@ -83,6 +97,96 @@ class SeekerAgent:
         self.camera = spec.thermal.camera
         self.saturation_c = spec.thermal.saturation_temp_c
         self.netd_c = spec.thermal.netd_mk / 1000.0
+        self.inv: _Investigation | None = None
+        self.targets: dict[str, Hotspot] = {}
+        self.max_epoch = 0
+        self.stats = {"investigated": 0, "confirmed": 0, "rejected": 0, "review": 0}
+        if not player:
+            world.bus.subscribe(sub_my_commands(drone_id), self._on_cmd)
+
+    # ---- INVESTIGATE (close-range confirmation) ------------------------------------------------------------------
+    def _on_cmd(self, msg: SwarmMessage) -> None:
+        if msg.epoch is not None:
+            if msg.epoch < self.max_epoch:
+                return                                    # stale leader (hard rule 7)
+            self.max_epoch = msg.epoch
+        b = msg.body
+        if isinstance(b, HotspotReport):
+            self.targets[b.hotspot.hotspot_id] = b.hotspot
+        elif isinstance(b, TaskAssign) and b.task.type is TaskType.INVESTIGATE and self.inv is None:
+            target = self.targets.get(b.task.target_hotspot_id)
+            if target is None:
+                return
+            clf = self.perception.detector.classifier
+            cfg = self.world.cfg
+            # look for the fire around the reported point: a patchy fire's tracked centroid can fall between its
+            # burning patches, so the radius grows with the fire (3 m + fire radius + 2 m margin, 6..10 m)
+            radius = min(10.0, max(6.0, 3.0 + math.sqrt(max(target.est_area_m2, 0.0) / math.pi) + 2.0))
+            self.inv = _Investigation(b.task.task_id, target,
+                                      HotspotConfirmer(clf, min_frames=5, max_frames=cfg.investigate_max_frames,
+                                                       search_radius_m=radius))
+
+    def _investigate(self, now: float) -> None:
+        inv, cfg, ap = self.inv, self.world.cfg, self.ap
+        tp = inv.target.position
+        ap.goto(Position(x=tp.x, y=tp.y, z=cfg.investigate_agl_m), cfg.lawnmower_speed_mps)
+        if not inv.looking:
+            inv.looking = math.hypot(ap.x - tp.x, ap.y - tp.y) < 3.0 and abs(ap.z - cfg.investigate_agl_m) < 3.0
+            return
+        if now < inv.next_t:
+            return
+        inv.next_t = now + 1.0 / cfg.investigate_hz
+        p = ap.position()
+        pose = Pose(position=p, yaw_deg=ap.heading_deg())
+        self.frame_i += 1
+        job = thermal.prepare(self.world.static, self.world.fire, pose, self.camera,
+                              noise_seed=zlib.crc32(f"{self.id}:i{self.frame_i}".encode()),
+                              netd_c=self.netd_c, saturation_c=self.saturation_c)
+        temp = thermal.render(self.world.static, job, cfg.fire_cell_m)
+        frame = ThermalFrame(drone_id=self.id, timestamp=now, temp_c=temp, pose=pose, camera=self.camera)
+        inv.confirmer.add_frame(frame, Position(x=tp.x, y=tp.y, z=0.0), self.camera.ground_sample_distance_m(p.z),
+                                saturation_c=self.saturation_c)
+        inv.frames += 1
+        self.last_preview = {"temp": temp, "t": now, "pose": pose}
+        res = inv.confirmer.result()
+        if res.status is None and inv.frames < cfg.investigate_max_frames:
+            return
+        self._finish_investigation(now, res)
+
+    def _finish_investigation(self, now: float, res) -> None:
+        inv, c = self.inv, self.inv.confirmer
+        self.inv = None
+        self.stats["investigated"] += 1
+        if res.status is HotspotStatus.FALSE_POSITIVE and res.seen_frac == 0.0:
+            # nothing hot near the point in ANY frame: "not found" (position error?), not "the CNN says no".
+            # Wrongly rejecting a real fire is the dangerous error (decision 0004), so escalate instead.
+            res = replace(res, status=None, reason="target not found near the reported point: escalate")
+        status = res.status or HotspotStatus.DETECTED
+        upd = {"status": status, "confidence": float(min(max(res.mean_p, 0.0), 1.0)), "last_seen": now,
+               "reported_by": self.id}
+        if res.median_peak_c is not None:
+            upd["peak_temp_c"] = float(min(max(res.median_peak_c, -50.0), 1500.0))
+        report = inv.target.model_copy(update=upd)
+        self.pub.publish(HotspotReport(hotspot=report))
+        if res.status is HotspotStatus.CONFIRMED:
+            self.stats["confirmed"] += 1
+        elif res.status is HotspotStatus.FALSE_POSITIVE:
+            self.stats["rejected"] += 1
+        elif c.reject_threshold < c.confirm_threshold:
+            # inconclusive: escalate to a human at the ground base (the leader won't wait forever for the answer)
+            self.stats["review"] += 1
+            lo, hi = float(c.reject_threshold), float(c.confirm_threshold)
+            score = min(max(float(res.mean_p), lo), hi - 1e-6)
+            self.pub.publish(ReviewReport(review_id=f"{self.id}:{report.hotspot_id}",
+                                          hotspot=report.model_copy(update={"confidence": score}), score=score,
+                                          not_fire_below=lo, fire_at_or_above=hi))
+        self.pub.publish(TaskComplete(task_id=inv.task_id, drone_id=self.id, success=True, result_status=res.status,
+                                      notes=f"{res.reason} (mean p {res.mean_p:.2f}, {res.n_frames} frames)"))
+        cfg = self.world.cfg
+        if self.searching and self.waypoints and self.wp_i < len(self.waypoints):
+            self.ap.goto(self.waypoints[self.wp_i], cfg.lawnmower_speed_mps)      # resume the lawnmower
+        else:
+            self.ap.goto(Position(x=self.ap.start.x, y=self.ap.start.y, z=cfg.transit_agl_m))
 
     # lawnmower over the assigned zone, using the autonomy coverage generator (scan lines along x)
     def assign_zone(self, zone: Zone, agl_m: float, overlap: float) -> None:
@@ -99,13 +203,15 @@ class SeekerAgent:
 
     def stop_search(self, rtb: bool = True) -> None:
         self.searching = False
-        if rtb and not self.player:
+        if rtb and not self.player and self.inv is None:      # an investigation in progress finishes first
             self.ap.goto(Position(x=self.ap.start.x, y=self.ap.start.y, z=self.world.cfg.transit_agl_m))
 
     def tick(self, now: float, dt: float) -> None:
         cfg = self.world.cfg
         if not self.player:
-            if self.searching and self.waypoints and self.ap.at_target(2.0):
+            if self.inv is not None:
+                self._investigate(now)
+            elif self.searching and self.waypoints and self.ap.at_target(2.0):
                 self.wp_i += 1
                 if self.wp_i >= len(self.waypoints) and cfg.loop_search:
                     self.waypoints = self.waypoints[::-1]   # re-fly the zone: re-observation -> growth estimates
@@ -117,7 +223,7 @@ class SeekerAgent:
                     self.searching = False   # done: hold over the last point
             self.ap.update(dt)
         # camera
-        if self.searching and now >= self.next_frame_t:
+        if self.searching and self.inv is None and now >= self.next_frame_t:
             self.next_frame_t = now + 1.0 / cfg.perception_hz
             self._capture(now)
         self._collect(now)
@@ -168,8 +274,19 @@ class SeekerAgent:
         return DroneState(drone_id=self.id, kind=DroneKind.SEEKER, position=ap.position(),
                           heading_deg=ap.heading_deg(), speed_mps=ap.speed_mps(), powertrain=Powertrain.ELECTRIC,
                           battery_pct=ap.battery_pct(), endurance_remaining_s=ap.endurance_remaining_s(),
-                          status=DroneStatus.SCANNING if self.searching else DroneStatus.RETURNING,
+                          status=(DroneStatus.TRANSIT if self.inv is not None else
+                                  DroneStatus.SCANNING if self.searching else DroneStatus.RETURNING),
+                          current_task_id=self.inv.task_id if self.inv is not None else None,
                           sensors_ok=dict(_SENSORS_OK, payload=True), link_quality=1.0, timestamp=now, epoch=1)
+
+    def activity(self) -> str:
+        if self.inv is not None:
+            t = self.inv.target
+            if not self.inv.looking:
+                return f"Flying to investigate {t.hotspot_id} (close-range confirmation)"
+            return (f"Investigating {t.hotspot_id} at {self.world.cfg.investigate_agl_m:.0f} m · "
+                    f"{self.inv.frames} frames, mean p {self.inv.confirmer.result().mean_p:.2f}")
+        return ""
 
 
 # ------------------------------------------------------------------------------------------------------------------

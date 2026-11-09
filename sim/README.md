@@ -62,8 +62,22 @@ Pure logic (contracts + stdlib only, hard rule 1), on the bus through `core.lead
 | Pre-positioning | `core/leader._stage / _standby` | idle + empty drones top up at the nearest point; idle + loaded drones with nothing queued spread evenly over the refill points (lakes + base), so later fires have water and a loaded drone close by. No-op without lakes. |
 | Seeker zones | `core/zones.py` | columns × bands of the circle that every seeker finishes at about the same time (transit + scan lines + turns), solved exactly as a contiguous partition of the actual scan lines. |
 
-Confirmation is still a stub: a report at/above the CNN's precision-first confirm threshold counts as CONFIRMED
-(the real flow is a seeker INVESTIGATE pass). Human-mode bots keep `brain_stub.StubLeader` + `bots.AnchorAssigner`.
+**Confirmation** (`core/leader._assign_investigations`, `sim/agents.SeekerAgent._investigate`, `sim/ground.py`):
+every detection starts DETECTED. The leader sends the nearest free seeker an INVESTIGATE task; it leaves its
+lawnmower, descends to 80 m (7.2 cm/px, the CNN's reference GSD), feeds 5–12 frames at 4 Hz to the real
+`perception.confirm.HotspotConfirmer` (search radius sized to the fire, 6–10 m), then resumes its zone.
+
+| Close-range result | What happens |
+|---|---|
+| mean p ≥ confirm threshold (precision-first) | CONFIRMED: water may be committed |
+| mean p < reject threshold, target seen | FALSE_POSITIVE: closed; drones already on the way are recalled |
+| in between, or nothing hot found near the point | REVIEW: `ReviewReport` → ground base queue (`groundbase/review_queue.py`) |
+| ground answers | `GroundCommand(CONFIRM_FIRE)` / `MARK_FALSE_POSITIVE` (sim operator: 70 % / 30 %, after 6 s) |
+| no ground answer in 20 s (or `ground_link=False`) | leader confirms on its own: recall-first, the swarm never depends on the link |
+
+DEMO dispatches attackers on detection (`dispatch_on_detect`) but gates the drop: an attacker reaching an unconfirmed
+fire HOLDs at its transit layer until the leader re-sends the picture as confirmed. Human-mode bots keep
+`brain_stub.StubLeader` + `bots.AnchorAssigner` (the player's own eyes confirm).
 
 ## DEMO mode
 
@@ -87,7 +101,8 @@ Reference runs (`python -m sim.headless --demo`, seed 1, 120 s, 48 drones; % fir
 | 12 + 36 | 21.4 | 11.8 |
 | 16 + 32 | 18.6 | 11.7 |
 
-Too few seekers miss fires (73 % coverage with 3); too many starve the attackers. Lakes roughly double the drops
+(Sweep run before close-range confirmation existed. With confirmation on, 8 + 40: lakes 22.1 %, dry 12.2 %; seeker
+coverage drops from 99.6 % to 86.6 % because seekers stop to investigate.) Too few seekers miss fires (73 % coverage with 3); too many starve the attackers. Lakes roughly double the drops
 (104 vs 58) and the fire fought. One seed and placeholder physics: tuning is tracked in GitHub issue #22. Performance:
 the 48-drone DEMO runs ~3× faster than real time headless (perception in 4 worker threads, ~0.9 GB RSS).
 

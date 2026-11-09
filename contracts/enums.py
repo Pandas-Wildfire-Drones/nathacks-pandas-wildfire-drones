@@ -155,6 +155,7 @@ class CommandKind(StrEnum):
     RESUME = "RESUME"
     ABORT_TASK = "ABORT_TASK"
     SET_PRIORITY = "SET_PRIORITY"                # params: {"priority": 0..1}; target_id = hotspot_id
+    CONFIRM_FIRE = "CONFIRM_FIRE"                # human confirms a REVIEW candidate is a fire -> CONFIRMED
     CONFIRM_OUT = "CONFIRM_OUT"                  # human declares hotspot out -> VERIFIED_OUT
     MARK_FALSE_POSITIVE = "MARK_FALSE_POSITIVE"  # human rejects a hotspot
     ENABLE_WATER_SOURCE = "ENABLE_WATER_SOURCE"

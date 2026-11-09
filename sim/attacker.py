@@ -11,6 +11,10 @@ autonomy adapter uses for the heavy extinguishers:
 It reports TaskComplete after the drop, re-images the spot (VerifyPass: real SuppressionChecker), then publishes
 the VERIFY HotspotReport. Heartbeats at 2 Hz.
 
+Drop gate: the leader may dispatch it to a fire that is still being confirmed (DEMO: dispatch on detection). The
+target picture then says DETECTED; the attacker flies there and HOLDS at its transit layer. It only descends and
+drops once the leader re-sends the picture as ASSIGNED/CONFIRMED (a FALSE_POSITIVE verdict re-tasks it instead).
+
 Navigation is direct, at a per-drone transit altitude layer (vertical separation). That stands in for PX4's own
 position control / collision avoidance; we deliberately skip the CBS planner here (GitHub issue #21).
 """
@@ -26,6 +30,7 @@ from contracts import (
     Heartbeat,
     Hotspot,
     HotspotReport,
+    HotspotStatus,
     Position,
     Powertrain,
     RefillGrant,
@@ -47,6 +52,7 @@ __all__ = ["STATUS_TEXT", "AttackerAgent"]
 STATUS_TEXT = {
     "IDLE": "standing by", "TO_FILL": "flying to refill", "FILL": "refilling", "TO_FIRE": "flying to fire",
     "DROP": "dropping", "VERIFY": "verifying the drop", "WAIT": "waiting for a refill grant",
+    "HOLD": "holding: fire not confirmed yet",
 }
 
 
@@ -112,8 +118,10 @@ class AttackerAgent:
             return
         self.aim = self._aim_point(self.target.position)
         if self.payload.water_l + 1e-6 < min(task.volume_l or self.payload.capacity_l, self.payload.capacity_l) * 0.98:
-            if self.mode in ("FILL", "TO_FILL") and self.fill_point is not None:
-                return                                          # already on the way to water: keep going
+            if self.mode == "FILL" and self.fill_point is not None:
+                # already pumping: standing on this point, it is the shortest detour to ANY fire (triangle inequality)
+                return
+            # on the way to a stand-by top-up: ask again, the leader picks the point on the shortest detour to THIS fire
             self.mode = "WAIT"
             self.pub.publish(RefillRequest(drone_id=self.id, position=self.ap.position(),
                                            water_remaining_l=self.payload.water_l,
@@ -122,6 +130,13 @@ class AttackerAgent:
             self._go_fire()
 
     _queued: Task | None = None
+
+    def _cleared(self) -> bool:
+        """Drop gate: the latest target picture from the leader says the fire is confirmed."""
+        if self.target is None:
+            return False
+        t = self.targets.get(self.target.hotspot_id, self.target)
+        return t.status in (HotspotStatus.ASSIGNED, HotspotStatus.CONFIRMED)
 
     def _complete(self, success: bool, used: float, notes: str | None = None) -> None:
         if self.task is not None:
@@ -178,11 +193,13 @@ class AttackerAgent:
                     self._complete(True, 0.0)                    # stand-by refill done
                     self.mode = "IDLE"
                     ap.goto(Position(x=ap.x, y=ap.y, z=self.layer_z))
-        elif m == "TO_FIRE":
+        elif m in ("TO_FIRE", "HOLD"):
             aim = self.aim
             d = self._hdist(aim)
             stop = ap.speed_mps() ** 2 / (2 * self.spec.max_accel_mps2) + 12.0
-            if d > stop:
+            cleared = self._cleared()
+            self.mode = "TO_FIRE" if cleared else ("HOLD" if d <= stop else "TO_FIRE")
+            if d > stop or not cleared:
                 ap.goto(Position(x=aim.x, y=aim.y, z=self.layer_z), self.spec.cruise_speed_mps)
             else:
                 ap.goto(Position(x=aim.x, y=aim.y, z=cfg.drop_agl_m))
@@ -224,7 +241,8 @@ class AttackerAgent:
         ap, spec = self.ap, self.spec
         status = {"IDLE": DroneStatus.IDLE, "TO_FILL": DroneStatus.TRANSIT, "FILL": DroneStatus.REFILLING,
                   "TO_FIRE": DroneStatus.TRANSIT, "DROP": DroneStatus.EXTINGUISHING,
-                  "VERIFY": DroneStatus.EXTINGUISHING, "WAIT": DroneStatus.IDLE}[self.mode]
+                  "VERIFY": DroneStatus.EXTINGUISHING, "WAIT": DroneStatus.IDLE,
+                  "HOLD": DroneStatus.TRANSIT}[self.mode]
         task_id = (self.task.task_id if self.task is not None
                    else f"VERIFY-{self.verify.hotspot.hotspot_id}" if self.verify.active else None)
         st = DroneState(drone_id=self.id, kind=DroneKind.EXTINGUISHER, position=ap.position(),
@@ -252,4 +270,6 @@ class AttackerAgent:
             return f"Verifying {self.verify.hotspot.hotspot_id} with its thermal camera"
         if m == "WAIT":
             return "Asking the leader where to refill"
+        if m == "HOLD" and tid:
+            return f"Holding over {tid}: waiting for the seeker's close-range confirmation"
         return f"Standing by · {self.payload.water_l:.0f} L aboard"

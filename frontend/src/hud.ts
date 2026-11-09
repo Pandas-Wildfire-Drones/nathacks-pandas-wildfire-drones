@@ -210,6 +210,12 @@ export class Hud {
         <div class="tele-row"><span>REFILLS · BASE</span><b>${d.fills_base}</b></div>
         <div class="tele-row"><span>VERIFY: OUT / HOT</span><b>${d.suppressed} / ${d.verify_hot}</b></div>
         <div class="sep"></div>
+        <div class="tele-row"><span>CLOSE-RANGE LOOKS</span><b>${d.investigated}</b></div>
+        <div class="tele-row"><span>· CONFIRMED / REJECTED</span><b>${d.confirmed_investigate} / ${d.rejected_investigate}</b></div>
+        <div class="tele-row"><span>· GROUND REVIEW</span><b>${d.reviews}</b></div>
+        <div class="tele-row"><span>· OPERATOR FIRE / NOT</span><b>${d.ground_fire} / ${d.ground_not_fire}</b></div>
+        <div class="tele-row"><span>· NO ANSWER → AUTO</span><b>${d.review_timeouts}</b></div>
+        <div class="sep"></div>
         <div class="tele-row"><span>FIRE NOW</span><b>${d.fire_m2.toFixed(0)} m²</b></div>
         <div class="tele-row"><span>NO-DRONE BASELINE</span><b>${d.baseline_m2.toFixed(0)} m²</b></div>
         <div class="tele-row"><span>FOAM OUT</span><b>${d.water_dropped_l} L</b></div>`;
