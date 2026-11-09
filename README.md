@@ -9,7 +9,7 @@ Fire behaviour drops overnight, which makes night the window to catch small spot
 swarm that **finds, confirms, prioritises and knocks down** those hotspots in the dark, and a simulator that runs the
 real code end to end so you can watch it work (or try to beat it yourself).
 
-📽️ **Slides:** [link to the shared deck — PLACEHOLDER](https://example.com/replace-with-slides-link)
+📽️ **Slides:** [link to the shared deck](https://docs.google.com/presentation/d/18SB2Th1RfMuDRv1g1dRPGCWnFcxzPuKzA0KwHjiuiCQ/edit?usp=sharing)
 
 ---
 
