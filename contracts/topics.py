@@ -15,7 +15,7 @@ from .messages import ClusterUpdate, LeaderClaim, SwarmMessage, TaskAnnounce, Ta
 __all__ = [
     "ROUTES", "topic_for", "topic_matches", "validate_pattern",
     "SUB_ALL_HEARTBEATS", "SUB_ALL_HOTSPOTS", "SUB_ALL_WATER_SOURCES", "SUB_ALL_SWARM",
-    "SUB_ALL_CLUSTERS", "SUB_GROUND_COMMANDS", "SUB_GROUND_ALERTS", "SUB_SIM_CONTROL",
+    "SUB_ALL_CLUSTERS", "SUB_GROUND_COMMANDS", "SUB_GROUND_ALERTS", "SUB_GROUND_REVIEWS", "SUB_SIM_CONTROL",
     "sub_cluster", "sub_my_commands",
 ]
 
@@ -23,6 +23,7 @@ __all__ = [
 ROUTES: dict[MessageType, str] = {
     MessageType.HEARTBEAT: "drone/{sender}/heartbeat",
     MessageType.HOTSPOT_REPORT: "drone/{sender}/hotspots",
+    MessageType.REVIEW_REPORT: "ground/reviews",
     MessageType.WATER_SOURCE_REPORT: "drone/{sender}/water_sources",
     MessageType.MAP_SYNC: "swarm/map_sync",
     MessageType.CLUSTER_UPDATE: "swarm/clusters/{cluster_id}/state",
@@ -48,6 +49,7 @@ SUB_ALL_SWARM = "swarm/#"                         # every drone
 SUB_ALL_CLUSTERS = "swarm/clusters/*/#"
 SUB_GROUND_COMMANDS = "ground/commands"           # every drone (filters on target_id)
 SUB_GROUND_ALERTS = "ground/alerts"               # ground base UI
+SUB_GROUND_REVIEWS = "ground/reviews"             # ground base operator review queue
 SUB_SIM_CONTROL = "sim/control"                   # simulator (and sim-aware drone wrappers)
 
 

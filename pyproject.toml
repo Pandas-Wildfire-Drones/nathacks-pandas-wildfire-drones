@@ -18,7 +18,7 @@ train = ["numpy>=1.26", "scipy>=1.11", "onnxruntime>=1.17", "torch>=2.2", "onnx>
          "scikit-learn>=1.3", "skl2onnx>=1.16", "tifffile", "imagecodecs", "pillow", "matplotlib", "ipykernel", "ipywidgets"]
 
 [tool.setuptools.packages.find]
-include = ["contracts*", "perception*", "training*"]
+include = ["contracts*", "perception*", "training*", "groundbase*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
