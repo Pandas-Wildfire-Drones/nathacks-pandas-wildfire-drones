@@ -76,14 +76,16 @@ class MissionCoordinator:
         fuel_use_kg_per_second: float = 0.0,
         fuel_reserve_kg: float = 0.0,
         reserve_fraction: float = 0.20,
-    ):
+        required_water_l: float | None = None,
+    ) -> ResourceAssessment:
         """Check whether this drone can safely perform the assigned task."""
 
-        required_water = (
-            task.volume_l
-            if task.volume_l is not None
-            else (self.drone.water_remaining_l or 0.0)
-        )
+        if required_water_l is not None:
+            required_water = required_water_l
+        elif task.volume_l is not None:
+            required_water = task.volume_l
+        else:
+            required_water = self.drone.water_remaining_l or 0.0
 
         return assess_mission_resources(
             drone=self.drone,
@@ -173,6 +175,15 @@ class MissionCoordinator:
         return_distance_m = hotspot.position.distance_to(
             context.base_position,
         )
+        required_water_l = (
+            task.volume_l
+            if task.volume_l is not None
+            else (
+                self.drone.water_remaining_l
+                if self.drone.water_remaining_l
+                else context.platform_spec.water_capacity_l
+            )
+        )
 
         try:
             resource_estimates = self._resource_estimates(
@@ -184,6 +195,7 @@ class MissionCoordinator:
                 return_distance_m=return_distance_m,
                 cruise_speed_mps=cruise_speed_mps,
                 hover_seconds=context.platform_spec.drop_release_s,
+                required_water_l=required_water_l,
                 **resource_estimates,
             )
         except ValueError as exc:
@@ -242,6 +254,16 @@ class MissionCoordinator:
                 resource_assessment=planned.resource_assessment,
             )
 
+        planned = MissionPlanningResult(
+            accepted=True,
+            reason=planned.reason,
+            plan=replace(
+                planned.plan,
+                water_required_l=required_water_l,
+            ),
+            resource_assessment=planned.resource_assessment,
+        )
+
         route_distance_m = sum(
             first.distance_to(second)
             for first, second in zip(
@@ -274,6 +296,7 @@ class MissionCoordinator:
             return_distance_m=return_distance_m,
             cruise_speed_mps=cruise_speed_mps,
             hover_seconds=context.platform_spec.drop_release_s,
+            required_water_l=required_water_l,
             **resource_estimates,
         )
 
