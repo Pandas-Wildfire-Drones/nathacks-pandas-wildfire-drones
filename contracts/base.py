@@ -15,7 +15,7 @@ __all__ = ["CONTRACT_VERSION", "Contract", "FrozenContract", "Seconds"]
 
 # Bump when a field is renamed/removed or semantics change. Add a line to the
 # changelog in context.md. Messages carry this in `SwarmMessage.v`.
-CONTRACT_VERSION = "0.3.0"
+CONTRACT_VERSION = "0.3.1"
 
 # All timestamps/durations are float SECONDS in the Clock's timebase
 # (sim time in the simulator, wall-clock epoch seconds on real hardware).

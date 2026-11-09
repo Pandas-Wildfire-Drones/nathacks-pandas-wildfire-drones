@@ -24,7 +24,7 @@ from .enums import (
 from .geometry import GridSpec, Position
 
 __all__ = [
-    "Heartbeat", "HotspotReport", "WaterSourceReport", "MapSync", "ClusterUpdate", "TaskAnnounce", "TaskBid",
+    "Heartbeat", "HotspotReport", "ReviewReport", "WaterSourceReport", "MapSync", "ClusterUpdate", "TaskAnnounce", "TaskBid",
     "TaskAssign", "TaskAck", "TaskComplete", "PathClaim", "LeaderClaim", "RefillRequest",
     "RefillGrant", "GroundCommand", "AlertNotice", "SimFault",
     "Body", "BODY_TYPES", "QoSProfile", "DEFAULT_QOS", "SwarmMessage", "encode", "decode",
@@ -43,6 +43,26 @@ class Heartbeat(_Body):
 class HotspotReport(_Body):
     type: Literal[MessageType.HOTSPOT_REPORT] = MessageType.HOTSPOT_REPORT
     hotspot: Hotspot
+
+
+class ReviewReport(_Body):
+    """A tracked candidate requiring human review at the ground base."""
+
+    type: Literal[MessageType.REVIEW_REPORT] = MessageType.REVIEW_REPORT
+    review_id: str = Field(min_length=1)
+    hotspot: Hotspot
+    score: float = Field(ge=0, le=1)
+    score_source: Literal["hotspot_confidence"] = "hotspot_confidence"
+    not_fire_below: float = Field(ge=0, le=1)
+    fire_at_or_above: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _review_band(self) -> "ReviewReport":
+        if self.not_fire_below > self.fire_at_or_above:
+            raise ValueError("not_fire_below must be <= fire_at_or_above")
+        if not self.not_fire_below <= self.score < self.fire_at_or_above:
+            raise ValueError("score must fall inside the REVIEW band")
+        return self
 
 
 class WaterSourceReport(_Body):
@@ -195,7 +215,7 @@ class SimFault(_Body):
 
 Body = Annotated[
     Union[
-        Heartbeat, HotspotReport, WaterSourceReport, MapSync, ClusterUpdate, TaskAnnounce, TaskBid, TaskAssign,
+        Heartbeat, HotspotReport, ReviewReport, WaterSourceReport, MapSync, ClusterUpdate, TaskAnnounce, TaskBid, TaskAssign,
         TaskAck, TaskComplete, PathClaim, LeaderClaim, RefillRequest, RefillGrant, GroundCommand,
         AlertNotice, SimFault,
     ],
@@ -205,6 +225,7 @@ Body = Annotated[
 BODY_TYPES: dict[MessageType, type[_Body]] = {
     MessageType.HEARTBEAT: Heartbeat,
     MessageType.HOTSPOT_REPORT: HotspotReport,
+    MessageType.REVIEW_REPORT: ReviewReport,
     MessageType.WATER_SOURCE_REPORT: WaterSourceReport,
     MessageType.MAP_SYNC: MapSync,
     MessageType.CLUSTER_UPDATE: ClusterUpdate,
@@ -234,6 +255,7 @@ class QoSProfile(FrozenContract):
 DEFAULT_QOS: dict[MessageType, QoSProfile] = {
     MessageType.HEARTBEAT: QoSProfile(reliable=False, ttl_s=3, rate_hz=2),
     MessageType.HOTSPOT_REPORT: QoSProfile(reliable=True, ttl_s=60),
+    MessageType.REVIEW_REPORT: QoSProfile(reliable=True, ttl_s=300),
     MessageType.WATER_SOURCE_REPORT: QoSProfile(reliable=True, ttl_s=60),
     MessageType.MAP_SYNC: QoSProfile(reliable=False, ttl_s=10, rate_hz=1),
     MessageType.CLUSTER_UPDATE: QoSProfile(reliable=True, ttl_s=15),

@@ -1,6 +1,6 @@
 # natHacks 2026 · Team Pandas · Night Initial-Attack Drone Swarm — CONTEXT
 
-`context_version: 0.3.6` · `contract_version: 0.3.0` · last updated 2026-11-08
+`context_version: 0.3.6` · `contract_version: 0.3.1` · last updated 2026-11-08
 
 ---
 
@@ -415,7 +415,7 @@ __all__ = ["CONTRACT_VERSION", "Contract", "FrozenContract", "Seconds"]
 
 # Bump when a field is renamed/removed or semantics change. Add a line to the
 # changelog in context.md. Messages carry this in `SwarmMessage.v`.
-CONTRACT_VERSION = "0.3.0"
+CONTRACT_VERSION = "0.3.1"
 
 # All timestamps/durations are float SECONDS in the Clock's timebase
 # (sim time in the simulator, wall-clock epoch seconds on real hardware).
@@ -434,7 +434,7 @@ class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 ```
 
-#### `contracts/enums.py` (170 lines)
+#### `contracts/enums.py` (171 lines)
 
 ```python
 """Enumerations shared by every workstream.
@@ -549,6 +549,7 @@ class DetectorKind(StrEnum):
 class MessageType(StrEnum):
     HEARTBEAT = "HEARTBEAT"
     HOTSPOT_REPORT = "HOTSPOT_REPORT"
+    REVIEW_REPORT = "REVIEW_REPORT"
     WATER_SOURCE_REPORT = "WATER_SOURCE_REPORT"
     MAP_SYNC = "MAP_SYNC"
     CLUSTER_UPDATE = "CLUSTER_UPDATE"
@@ -1045,7 +1046,7 @@ class Alert(Contract):
     timestamp: float
 ```
 
-#### `contracts/messages.py` (312 lines)
+#### `contracts/messages.py` (334 lines)
 
 ```python
 """Bus messages: one frozen body model per MessageType, joined by a discriminated union.
@@ -1074,7 +1075,7 @@ from .enums import (
 from .geometry import GridSpec, Position
 
 __all__ = [
-    "Heartbeat", "HotspotReport", "WaterSourceReport", "MapSync", "ClusterUpdate", "TaskAnnounce", "TaskBid",
+    "Heartbeat", "HotspotReport", "ReviewReport", "WaterSourceReport", "MapSync", "ClusterUpdate", "TaskAnnounce", "TaskBid",
     "TaskAssign", "TaskAck", "TaskComplete", "PathClaim", "LeaderClaim", "RefillRequest",
     "RefillGrant", "GroundCommand", "AlertNotice", "SimFault",
     "Body", "BODY_TYPES", "QoSProfile", "DEFAULT_QOS", "SwarmMessage", "encode", "decode",
@@ -1093,6 +1094,26 @@ class Heartbeat(_Body):
 class HotspotReport(_Body):
     type: Literal[MessageType.HOTSPOT_REPORT] = MessageType.HOTSPOT_REPORT
     hotspot: Hotspot
+
+
+class ReviewReport(_Body):
+    """A tracked candidate requiring human review at the ground base."""
+
+    type: Literal[MessageType.REVIEW_REPORT] = MessageType.REVIEW_REPORT
+    review_id: str = Field(min_length=1)
+    hotspot: Hotspot
+    score: float = Field(ge=0, le=1)
+    score_source: Literal["hotspot_confidence"] = "hotspot_confidence"
+    not_fire_below: float = Field(ge=0, le=1)
+    fire_at_or_above: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _review_band(self) -> "ReviewReport":
+        if self.not_fire_below > self.fire_at_or_above:
+            raise ValueError("not_fire_below must be <= fire_at_or_above")
+        if not self.not_fire_below <= self.score < self.fire_at_or_above:
+            raise ValueError("score must fall inside the REVIEW band")
+        return self
 
 
 class WaterSourceReport(_Body):
@@ -1245,7 +1266,7 @@ class SimFault(_Body):
 
 Body = Annotated[
     Union[
-        Heartbeat, HotspotReport, WaterSourceReport, MapSync, ClusterUpdate, TaskAnnounce, TaskBid, TaskAssign,
+        Heartbeat, HotspotReport, ReviewReport, WaterSourceReport, MapSync, ClusterUpdate, TaskAnnounce, TaskBid, TaskAssign,
         TaskAck, TaskComplete, PathClaim, LeaderClaim, RefillRequest, RefillGrant, GroundCommand,
         AlertNotice, SimFault,
     ],
@@ -1255,6 +1276,7 @@ Body = Annotated[
 BODY_TYPES: dict[MessageType, type[_Body]] = {
     MessageType.HEARTBEAT: Heartbeat,
     MessageType.HOTSPOT_REPORT: HotspotReport,
+    MessageType.REVIEW_REPORT: ReviewReport,
     MessageType.WATER_SOURCE_REPORT: WaterSourceReport,
     MessageType.MAP_SYNC: MapSync,
     MessageType.CLUSTER_UPDATE: ClusterUpdate,
@@ -1284,6 +1306,7 @@ class QoSProfile(FrozenContract):
 DEFAULT_QOS: dict[MessageType, QoSProfile] = {
     MessageType.HEARTBEAT: QoSProfile(reliable=False, ttl_s=3, rate_hz=2),
     MessageType.HOTSPOT_REPORT: QoSProfile(reliable=True, ttl_s=60),
+    MessageType.REVIEW_REPORT: QoSProfile(reliable=True, ttl_s=300),
     MessageType.WATER_SOURCE_REPORT: QoSProfile(reliable=True, ttl_s=60),
     MessageType.MAP_SYNC: QoSProfile(reliable=False, ttl_s=10, rate_hz=1),
     MessageType.CLUSTER_UPDATE: QoSProfile(reliable=True, ttl_s=15),
@@ -1362,7 +1385,7 @@ def decode(raw: bytes | str) -> SwarmMessage:
     return SwarmMessage.model_validate_json(raw)
 ```
 
-#### `contracts/topics.py` (130 lines)
+#### `contracts/topics.py` (132 lines)
 
 ```python
 """Topic names and matching rules.
@@ -1382,7 +1405,7 @@ from .messages import ClusterUpdate, LeaderClaim, SwarmMessage, TaskAnnounce, Ta
 __all__ = [
     "ROUTES", "topic_for", "topic_matches", "validate_pattern",
     "SUB_ALL_HEARTBEATS", "SUB_ALL_HOTSPOTS", "SUB_ALL_WATER_SOURCES", "SUB_ALL_SWARM",
-    "SUB_ALL_CLUSTERS", "SUB_GROUND_COMMANDS", "SUB_GROUND_ALERTS", "SUB_SIM_CONTROL",
+    "SUB_ALL_CLUSTERS", "SUB_GROUND_COMMANDS", "SUB_GROUND_ALERTS", "SUB_GROUND_REVIEWS", "SUB_SIM_CONTROL",
     "sub_cluster", "sub_my_commands",
 ]
 
@@ -1390,6 +1413,7 @@ __all__ = [
 ROUTES: dict[MessageType, str] = {
     MessageType.HEARTBEAT: "drone/{sender}/heartbeat",
     MessageType.HOTSPOT_REPORT: "drone/{sender}/hotspots",
+    MessageType.REVIEW_REPORT: "ground/reviews",
     MessageType.WATER_SOURCE_REPORT: "drone/{sender}/water_sources",
     MessageType.MAP_SYNC: "swarm/map_sync",
     MessageType.CLUSTER_UPDATE: "swarm/clusters/{cluster_id}/state",
@@ -1415,6 +1439,7 @@ SUB_ALL_SWARM = "swarm/#"                         # every drone
 SUB_ALL_CLUSTERS = "swarm/clusters/*/#"
 SUB_GROUND_COMMANDS = "ground/commands"           # every drone (filters on target_id)
 SUB_GROUND_ALERTS = "ground/alerts"               # ground base UI
+SUB_GROUND_REVIEWS = "ground/reviews"             # ground base operator review queue
 SUB_SIM_CONTROL = "sim/control"                   # simulator (and sim-aware drone wrappers)
 
 
@@ -1995,6 +2020,7 @@ def example_scenario() -> ScenarioConfig:
 | Date | By | Change | Why |
 |---|---|---|---|
 | 2026-11-08 | sim chat (integration) | v0.3.6: added `sim/` (Python game/sim server: FLAME 3 NADIR thermal maps, fire CA, thermal renderer, SimBus, SimAutopilot/SimPayload, real perception + autonomy in the loop, swarm-brain STUBS in `sim/brain_stub.py`, shadow-run scoring) and `frontend/` (three.js + TS game client, pnpm); `tests/sim/` (6 tests); `pyproject` extra `[sim]`, packages `autonomy*`/`sim*`; no contract changes. Details: `sim/README.md`, `exclude/simulator_task.md` | demo: human + bots vs autonomous swarm on the same seed |
+| 2026-11-08 | perception / ground-base integration | v0.3.6 / contracts 0.3.1: add reliable `REVIEW_REPORT` routing to `ground/reviews`, wire tracked-hotspot triage through `PerceptionReporter`, and add a deduplicating ground-base review queue | Ensure REVIEW-band candidates reach an operator queue |
 | 2026-11-08 | merge (C) | v0.3.5: merged `main` into `DoqCA/flame3-geometry` (contracts 0.3.0 cluster coordination, per-drone autonomy, CBS deconfliction, mission planning); resolved `.gitignore` (main's layout + `.env*`) and this header/changelog; no contract changes on this side | keep the perception branch current with main |
 | 2026-11-08 | perception chat (C) | v0.3.4: FLAME 3 NADIR downloaded + history-labelled (`build_nadir.py`), Sycan weak masks (`build_sycan_weak.py`), ignore masks (`MASK_IGNORE`) through datasets/evaluation/patches/evaluate/compare, hard-example sampling + GT cap in `patch_data.py`/`train_cnn.py`, point-level NADIR view, six test views + matrix CLI (`eval_sets.py`), notebook rebuilt (models × views), `fire_cnn_mix.onnx` (mix_v2) recommended; `imagecodecs` in `[train]`; 120 tests; no contract changes | user asked to train/test on NADIR and see all test combinations |
 | 2026-11-08 | perception chat (C) | v0.3.3: `perception/triage.py` (FIRE/REVIEW/NOT_FIRE bands), `training/compare.py` + `compare_plots.py` + `compare_approaches.ipynb` (three approaches, threshold sliders, ROC/PR, sweep heatmaps, reliability, error gallery); hand-label comparison in RESULTS.md; `ipywidgets` in `[train]`; 114 tests; no contract changes | user asked where to compare model / algorithmic / pipeline and try 3-band thresholds |

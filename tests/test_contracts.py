@@ -10,7 +10,7 @@ from contracts import (
     CommandKind, Detection,
     DetectorKind, DroneKind, DroneState, DroneStatus, ExtinguishingAgent, GridCellUpdate,
     GridIndex, GridSpec, GroundCommand, Heartbeat, Hotspot, HotspotReport, HotspotStatus,
-    LeaderClaim, MapSync, MessageType, PathClaim, Position, RefillGrant, RefillRequest,
+    LeaderClaim, MapSync, MessageType, PathClaim, Position, RefillGrant, RefillRequest, ReviewReport,
     RefillStation, RefillTargetKind, ScenarioConfig, Severity, SimFault, SimFaultKind,
     SwarmMessage, Task, TaskAck, TaskAnnounce, TaskAssign, TaskBid, TaskComplete, TaskStatus,
     TaskType, WaterSource, WaterSourceKind, WaterSourceOrigin, WaterSourceReport, Zone,
@@ -53,6 +53,13 @@ def all_bodies():
     return {
         MessageType.HEARTBEAT: Heartbeat(state=state()),
         MessageType.HOTSPOT_REPORT: HotspotReport(hotspot=hotspot()),
+        MessageType.REVIEW_REPORT: ReviewReport(
+            review_id="d01:h1",
+            hotspot=hotspot().model_copy(update={"confidence": 0.5}),
+            score=0.5,
+            not_fire_below=0.2,
+            fire_at_or_above=0.8,
+        ),
         MessageType.WATER_SOURCE_REPORT: WaterSourceReport(source=source()),
         MessageType.MAP_SYNC: MapSync(grid=grid, seq=3, cells=[GridCellUpdate(row=1, col=2, log_odds=2.0, last_seen=9.0)],
                                       hotspots=[hotspot()], water_sources=[source()]),
@@ -154,6 +161,12 @@ def test_expiry_and_default_qos():
     rep = SwarmMessage.create("d01", HotspotReport(hotspot=hotspot()), now=0.0)
     assert rep.reliable is True
     assert rep.v == CONTRACT_VERSION
+
+
+def test_review_report_routes_to_ground_base():
+    msg = SwarmMessage.create("d01", all_bodies()[MessageType.REVIEW_REPORT], now=10.0)
+    assert topic_for(msg) == "ground/reviews"
+    assert msg.reliable and msg.ttl_s == 300
 
 
 # ---------- entity validation ----------

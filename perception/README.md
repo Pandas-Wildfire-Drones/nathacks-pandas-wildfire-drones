@@ -12,6 +12,7 @@ Drone-side perception. Imports only `contracts`, numpy and scipy (hard rule 1); 
 | `tracking.py` | `HotspotTracker`: detections over frames → `Hotspot` entities |
 | `mapping.py` | `LogOddsMap`: NumPy log-odds layers → `GridCellUpdate` deltas for `MapSync` |
 | `pipeline.py` | `SeekerPerception`: one call per frame, all of the above, with sensor context |
+| `reporting.py` | `PerceptionReporter`: publishes hotspot reports and sends REVIEW-band candidates to `ground/reviews` |
 | `frame_context.py` | `FrameContext` (altimeter, RTK/thermal health, FFC, gain saturation, friendly drones) + `PoseBuffer` (pose at exposure time) |
 | `terrain.py` / `distortion.py` | `DemSampler` (terrain height) / `LensDistortion` (Brown–Conrady) |
 | `confirm.py` | close range: `HotspotConfirmer` (INVESTIGATE) and `SuppressionChecker` (VERIFY after a drop) |
@@ -28,6 +29,8 @@ Drone-side perception. Imports only `contracts`, numpy and scipy (hard rule 1); 
 ```python
 from perception.detectors import FakeDetector, FusedDetector, TruthSource, load_classifier
 from perception.pipeline import SeekerPerception
+from perception.reporting import PerceptionReporter
+from perception.triage import TriageBands
 
 # day one: ground-truth-driven detector (sim supplies current fire/decoy state)
 det = FakeDetector(lambda now: [TruthSource("F1", fire_pos, area_m2=2.0, temp_c=450.0)], seed=scenario.seed)
@@ -36,10 +39,11 @@ det = FusedDetector(load_classifier("perception/models/fire_cnn.onnx"))
 
 perc = SeekerPerception(drone_id="seeker-1", detector=det, grid=scenario.grid,
                         dem=dem_sampler, pose_buffer=pose_buffer)        # both optional
+reporter = PerceptionReporter(perc, bus, TriageBands(0.2, 0.8))  # calibrate for fused hotspot confidence
 pose_buffer.add(t, autopilot_pose)                                      # every autopilot tick (50-200 Hz)
 ctx = FrameContext(agl_m=altimeter_m, gnss_rtk_ok=state.sensors_ok.get("gnss_rtk", True),
                    ffc_active=camera.ffc_in_progress, friendly_positions=other_drone_positions)
-changed_hotspots = perc.process(thermal_frame, ctx)  # -> publish each as HotspotReport
+changed_hotspots = reporter.process(thermal_frame, ctx)  # -> HotspotReport + one ground review per REVIEW track
 cells = perc.map.pop_updates()                       # -> MapSync.cells
 
 # INVESTIGATE task (seeker hovering at ~30 m over a candidate hotspot)

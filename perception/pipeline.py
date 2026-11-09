@@ -1,7 +1,8 @@
 """On-drone perception loop: one ThermalFrame (+ optional FrameContext) in -> changed Hotspots out.
 
 Workstream B owns the loop that calls `process(frame, ctx)` each camera tick and publishes the returned hotspots as
-HotspotReport; `map.pop_updates()` feeds MapSync. Swap the detector freely:
+HotspotReport; `PerceptionReporter` also routes candidates in the REVIEW band to the ground base.
+`map.pop_updates()` feeds MapSync. Swap the detector freely:
 FakeDetector (day one) -> ThresholdDetector -> FusedDetector(OnnxCnnClassifier(...)).
 
 Sensor wiring (docs/decisions/0002):
